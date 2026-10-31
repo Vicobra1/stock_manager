@@ -11,6 +11,10 @@ Application web de gestion de stock pour une boutique, organisée en deux partie
 - Désactivation/réactivation des produits; une fiche ayant des mouvements n’est pas supprimable afin de préserver l’historique.
 - Interface sombre et adaptable aux petits écrans.
 
+## Documentation visuelle
+
+Le dossier [`docs/`](docs/) contient une description du fonctionnement, des diagrammes d’architecture et des parcours de vente/entrée de stock, ainsi qu’un aperçu du modèle de données.
+
 ## Prérequis
 
 - Python 3.12+ (Django et ses dépendances dans `backend/requirements.txt`)
