@@ -10,6 +10,8 @@ Application web de gestion de stock pour une boutique, organisée en deux partie
 - Refus d’une vente qui excède la quantité disponible.
 - Désactivation/réactivation des produits; une fiche ayant des mouvements n’est pas supprimable afin de préserver l’historique.
 - Interface sombre et adaptable aux petits écrans.
+- Tableau de bord : ventes et bénéfice du jour, valeur du stock, graphique des 7 derniers jours, meilleures ventes, produits à réapprovisionner (`GET /api/dashboard/`).
+- Historique des mouvements paginé et filtrable par type, produit, fournisseur, période et texte libre (`GET /api/movements/?movement_type=sale&date_from=2026-01-01&q=riz`).
 
 ## Documentation visuelle
 
