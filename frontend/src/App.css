@@ -12,7 +12,7 @@
 .pager{display:flex;justify-content:space-between;align-items:center;padding:13px 20px;border-top:1px solid #2b2d36;color:#90919c;font-size:12px}.pager .secondary{padding:7px 12px;font-size:12px}
 @media(max-width:1100px){.stats-4{grid-template-columns:repeat(2,1fr)}.dash-grid{grid-template-columns:1fr}}
 @media(max-width:600px){.stats-4{grid-template-columns:1fr}.filters label,.filters select,.filters input{width:100%}}
-@media(max-width:850px){.nav-item:not(.active){display:flex}.nav-item{margin-top:12px}}
+@media(max-width:850px){.nav-item:not(.active){display:flex}.nav-item{margin-top:12px;font-size:0;justify-content:center;padding:0}}
 
 /* Connexion et compte utilisateur */
 .login-page{min-height:100vh;display:grid;place-items:center;padding:18px;background:#101116}
