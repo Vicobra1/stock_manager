@@ -1,8 +1,10 @@
 from datetime import timedelta
 from decimal import Decimal
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
+from rest_framework.authtoken.models import Token
 
 from .models import Product, StockMovement, Supplier
 
@@ -21,8 +23,17 @@ def make_movement(product, movement_type, quantity, days_ago=0, unit_price=None,
     return movement
 
 
-class MovementFilterTests(TestCase):
+class AuthenticatedTestCase(TestCase):
+    """Toute l'API exige un jeton : chaque requête du client de test l'envoie."""
+
     def setUp(self):
+        user = get_user_model().objects.create_user("testeur", password="mot-de-passe-de-test-123")
+        self.client.defaults["HTTP_AUTHORIZATION"] = f"Token {Token.objects.create(user=user).key}"
+
+
+class MovementFilterTests(AuthenticatedTestCase):
+    def setUp(self):
+        super().setUp()
         self.s1 = Supplier.objects.create(name="Fournisseur A")
         self.s2 = Supplier.objects.create(name="Fournisseur B")
         self.p1 = make_product(self.s1, "A-001")
@@ -71,8 +82,9 @@ class MovementFilterTests(TestCase):
             self.assertEqual(self.client.get("/api/movements/", params).status_code, 400, params)
 
 
-class DashboardTests(TestCase):
+class DashboardTests(AuthenticatedTestCase):
     def setUp(self):
+        super().setUp()
         supplier = Supplier.objects.create(name="Fournisseur A")
         self.ok = make_product(supplier, "OK", quantity=10, purchase="100", selling="150")
         self.low = make_product(supplier, "LOW", quantity=2, purchase="50", selling="80")

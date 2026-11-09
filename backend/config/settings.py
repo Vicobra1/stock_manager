@@ -134,10 +134,11 @@ MAILERS = {
 
 CORS_ALLOWED_ORIGINS = ['http://localhost:5173']
 REST_FRAMEWORK = {
-    # L'en-tête « Authorization: Token <clé> » est lu s'il est présent, mais les routes restent publiques
-    # (AllowAny) : seules /api/auth/logout/ et /api/auth/me/ exigent d'être connecté.
+    # Toute l'API exige l'en-tête « Authorization: Token <clé> », sauf /api/auth/login/.
     'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.TokenAuthentication'],
-    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
+    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
+    # Nombre maximal de tentatives de connexion par adresse IP.
+    'DEFAULT_THROTTLE_RATES': {'login': '5/min'},
 }
 
 

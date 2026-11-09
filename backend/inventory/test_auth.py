@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import TestCase
 
 User = get_user_model()
@@ -7,6 +8,7 @@ PASSWORD = "mot-de-passe-de-test-123"
 
 class AuthTests(TestCase):
     def setUp(self):
+        cache.clear()  # le compteur de tentatives de connexion ne doit pas passer d'un test à l'autre
         self.user = User.objects.create_user("gerant", password=PASSWORD, first_name="Awa", is_staff=True)
 
     def login(self, **overrides):
@@ -60,11 +62,31 @@ class AuthTests(TestCase):
     def test_logout_requires_a_token(self):
         self.assertEqual(self.client.post("/api/auth/logout/").status_code, 401)
 
-    def test_existing_routes_stay_public(self):
-        self.assertEqual(self.client.get("/api/products/").status_code, 200)
-        self.assertEqual(self.client.get("/api/dashboard/").status_code, 200)
+    def test_business_routes_require_a_token(self):
+        for path in ("/api/products/", "/api/suppliers/", "/api/movements/", "/api/dashboard/"):
+            self.assertEqual(self.client.get(path).status_code, 401, path)
 
-    def test_invalid_token_is_rejected_even_on_public_routes(self):
+    def test_business_routes_accept_a_valid_token(self):
+        headers = self.auth(self.login().json()["token"])
+        for path in ("/api/products/", "/api/suppliers/", "/api/movements/", "/api/dashboard/"):
+            self.assertEqual(self.client.get(path, **headers).status_code, 200, path)
+
+    def test_writes_require_a_token(self):
+        response = self.client.post("/api/suppliers/", {"name": "Intrus"}, content_type="application/json")
+        self.assertEqual(response.status_code, 401)
+
+    def test_login_ignores_an_old_invalid_token(self):
+        response = self.client.post("/api/auth/login/", {"username": "gerant", "password": PASSWORD},
+                                    content_type="application/json", **self.auth("jeton-perime"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_too_many_login_attempts_are_blocked(self):
+        for _ in range(5):
+            self.assertEqual(self.login(password="faux").status_code, 400)
+        self.assertEqual(self.login(password="faux").status_code, 429)
+        self.assertEqual(self.login().status_code, 429)  # même avec le bon mot de passe
+
+    def test_invalid_token_is_rejected(self):
         self.assertEqual(self.client.get("/api/products/", **self.auth("jeton-invalide")).status_code, 401)
         token = self.login().json()["token"]
         self.assertEqual(self.client.get("/api/products/", **self.auth(token)).status_code, 200)

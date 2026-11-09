@@ -3,6 +3,7 @@ from rest_framework import serializers, status
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 
@@ -21,7 +22,11 @@ class LoginSerializer(serializers.Serializer):
 
 class LoginView(APIView):
     """POST {username, password} -> {token, user}. Le même message d'erreur est renvoyé quel que soit le motif."""
+    # Aucune authentification ici : un ancien jeton envoyé par erreur ne doit pas empêcher de se connecter.
+    authentication_classes = []
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "login"
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
