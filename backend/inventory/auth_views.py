@@ -1,5 +1,6 @@
 from django.contrib.auth import authenticate
 from rest_framework import serializers, status
+from rest_framework.exceptions import Throttled
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -27,6 +28,10 @@ class LoginView(APIView):
     permission_classes = [AllowAny]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "login"
+
+    def throttled(self, request, wait):
+        seconds = max(int(wait or 0), 1)
+        raise Throttled(wait=wait, detail=f"Trop de tentatives de connexion. Réessayez dans {seconds} seconde{'s' if seconds > 1 else ''}.")
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)

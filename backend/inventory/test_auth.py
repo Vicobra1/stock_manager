@@ -86,6 +86,12 @@ class AuthTests(TestCase):
         self.assertEqual(self.login(password="faux").status_code, 429)
         self.assertEqual(self.login().status_code, 429)  # même avec le bon mot de passe
 
+    def test_blocked_login_message_is_in_french(self):
+        for _ in range(5):
+            self.login(password="faux")
+        detail = self.login().json()["detail"]
+        self.assertTrue(detail.startswith("Trop de tentatives de connexion. Réessayez dans "), detail)
+
     def test_invalid_token_is_rejected(self):
         self.assertEqual(self.client.get("/api/products/", **self.auth("jeton-invalide")).status_code, 401)
         token = self.login().json()["token"]
