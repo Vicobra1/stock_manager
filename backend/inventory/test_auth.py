@@ -88,6 +88,14 @@ class AuthTests(TestCase):
         self.assertEqual(self.login(password="faux").status_code, 429)
         self.assertEqual(self.login().status_code, 429)  # même avec le bon mot de passe
 
+    def test_changing_x_forwarded_for_does_not_bypass_the_limit(self):
+        def attempt(ip):
+            return self.client.post("/api/auth/login/", {"username": "gerant", "password": "faux"},
+                                    content_type="application/json", HTTP_X_FORWARDED_FOR=ip)
+        for i in range(5):
+            self.assertEqual(attempt(f"10.0.0.{i}").status_code, 400)
+        self.assertEqual(attempt("10.0.0.99").status_code, 429)  # bloqué malgré une « nouvelle » adresse
+
     def test_blocked_login_message_is_in_french(self):
         for _ in range(5):
             self.login(password="faux")
