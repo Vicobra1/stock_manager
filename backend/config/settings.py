@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'rest_framework.authtoken',
     'corsheaders',
     'inventory',
 ]
@@ -132,7 +133,12 @@ MAILERS = {
 }
 
 CORS_ALLOWED_ORIGINS = ['http://localhost:5173']
-REST_FRAMEWORK = {'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny']}
+REST_FRAMEWORK = {
+    # L'en-tête « Authorization: Token <clé> » est lu s'il est présent, mais les routes restent publiques
+    # (AllowAny) : seules /api/auth/logout/ et /api/auth/me/ exigent d'être connecté.
+    'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.TokenAuthentication'],
+    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
+}
 
 
 
