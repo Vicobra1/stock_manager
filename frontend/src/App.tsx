@@ -2,10 +2,10 @@ import { useEffect, useState, type FormEvent } from 'react'
 import './App.css'
 import Dashboard from './Dashboard'
 import Movements from './Movements'
+import { request, type User } from './api'
 
 type Supplier = { id: number; name: string }
 type Product = { id: number; name: string; reference: string; supplier: number; supplier_name: string; purchase_price: string; selling_price: string; quantity: number; low_stock_threshold: number; is_low_stock: boolean; is_active: boolean }
-const API = '/api'
 
 type Page = 'dashboard' | 'products' | 'movements'
 const PAGES: Record<Page, { icon: string; label: string; title: string; subtitle: string }> = {
@@ -14,7 +14,7 @@ const PAGES: Record<Page, { icon: string; label: string; title: string; subtitle
   movements: { icon: '⇅', label: 'Mouvements', title: 'Historique des mouvements', subtitle: 'Toutes les entrées et ventes, filtrables par type, produit, fournisseur et date.' },
 }
 
-function App() {
+function App({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [page, setPage] = useState<Page>('products')
   const [products, setProducts] = useState<Product[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -29,12 +29,6 @@ function App() {
   const [movement, setMovement] = useState<{ product: Product; kind: 'sale' | 'entry' } | null>(null)
   const [moveQty, setMoveQty] = useState('1')
 
-  async function request(path: string, init?: RequestInit) {
-    const response = await fetch(`${API}${path}`, { ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } })
-    const data = await response.json().catch(() => ({}))
-    if (!response.ok) throw new Error(data.detail || Object.values(data).flat().join(' ') || 'Une erreur est survenue.')
-    return data
-  }
   async function refresh() {
     try {
       const [p, s] = await Promise.all([request(includeInactive ? '/products/' : '/products/?active=true'), request('/suppliers/')])
@@ -83,10 +77,11 @@ function App() {
   const filtered = products.filter(p => `${p.name} ${p.reference} ${p.supplier_name}`.toLowerCase().includes(query.toLowerCase()))
   const lowCount = products.filter(p => p.is_low_stock).length
   const money = (v: string) => `${Number(v).toLocaleString('fr-FR')} FC`
+  const displayName = user.first_name || user.username
 
   return <main className="app-shell">
     <aside className="sidebar"><div className="brand"><span className="brand-mark">S</span><span>Stock<span className="brand-light">Boutique</span></span></div><p className="nav-label">GESTION</p>{(Object.keys(PAGES) as Page[]).map(key => <button key={key} className={`nav-item ${page === key ? 'active' : ''}`} onClick={() => setPage(key)}><span>{PAGES[key].icon}</span> {PAGES[key].label}</button>)}<div className="side-note"><span className="status-dot"/> API Django</div></aside>
-    <section className="main-area"><header className="topbar"><span className="crumb">Gestion <span>/</span> {PAGES[page].label}</span><span className="avatar">B</span></header>
+    <section className="main-area"><header className="topbar"><span className="crumb">Gestion <span>/</span> {PAGES[page].label}</span><div className="user-box"><span className="user-name">{displayName}</span><span className="avatar">{displayName.charAt(0).toUpperCase()}</span><button className="secondary logout" onClick={onLogout}>Se déconnecter</button></div></header>
       <div className="content"><div className="page-heading"><div><p className="eyebrow">INVENTAIRE</p><h1>{PAGES[page].title}</h1><p className="subtitle">{PAGES[page].subtitle}</p></div>{page === 'products' && <button className="primary" onClick={openNew}>＋ <span>Nouveau produit</span></button>}</div>
         {page === 'dashboard' && <Dashboard onShowMovements={() => setPage('movements')} />}
         {page === 'movements' && <Movements />}

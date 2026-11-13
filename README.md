@@ -12,6 +12,7 @@ Application web de gestion de stock pour une boutique, organisée en deux partie
 - Interface sombre et adaptable aux petits écrans.
 - Tableau de bord : ventes et bénéfice du jour, valeur du stock, graphique des 7 derniers jours, meilleures ventes, produits à réapprovisionner (`GET /api/dashboard/`).
 - Historique des mouvements paginé et filtrable par type, produit, fournisseur, période et texte libre (`GET /api/movements/?movement_type=sale&date_from=2026-01-01&q=riz`).
+- Connexion obligatoire : les comptes se créent avec `python manage.py createsuperuser` ou dans l’administration Django.
 
 ## Documentation visuelle
 
@@ -54,6 +55,6 @@ Le fichier `.env.example` est un modèle sans secret réel. La base SQLite, les 
 
 ## Sécurité et état
 
-Ce projet est un prototype de développement. L’API configure actuellement `AllowAny`; n’expose pas ce backend à Internet avant d’avoir mis en place authentification, permissions, configuration de production (`DEBUG=False`, clé secrète dédiée, hôtes autorisés, HTTPS) et sauvegardes. SQLite convient au développement local; évalue PostgreSQL pour une utilisation concurrente en production.
+Ce projet est un prototype de développement. Toute l’API exige une connexion par jeton (sauf `/api/auth/login/`, limitée à 5 tentatives par minute), mais n’expose pas ce backend à Internet avant d’avoir mis en place les permissions par rôle et la configuration de production (`DEBUG=False`, clé secrète dédiée, hôtes autorisés, HTTPS) et sauvegardes. SQLite convient au développement local; évalue PostgreSQL pour une utilisation concurrente en production.
 
 Aucune licence n’est incluse pour l’instant. Ajoute-en une uniquement après avoir choisi les conditions de réutilisation du code.
