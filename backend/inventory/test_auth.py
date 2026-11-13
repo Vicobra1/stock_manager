@@ -1,3 +1,5 @@
+import re
+
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import TestCase
@@ -89,8 +91,10 @@ class AuthTests(TestCase):
     def test_blocked_login_message_is_in_french(self):
         for _ in range(5):
             self.login(password="faux")
-        detail = self.login().json()["detail"]
-        self.assertTrue(detail.startswith("Trop de tentatives de connexion. Réessayez dans "), detail)
+        response = self.login()
+        match = re.fullmatch(r"Trop de tentatives de connexion\. Réessayez dans (\d+) secondes?\.", response.json()["detail"])
+        self.assertIsNotNone(match, response.json()["detail"])  # message complet, sans phrase ajoutée par DRF
+        self.assertEqual(response["Retry-After"], match.group(1))  # même délai que l'en-tête
 
     def test_invalid_token_is_rejected(self):
         self.assertEqual(self.client.get("/api/products/", **self.auth("jeton-invalide")).status_code, 401)

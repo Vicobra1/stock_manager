@@ -1,3 +1,5 @@
+import math
+
 from django.contrib.auth import authenticate
 from rest_framework import serializers, status
 from rest_framework.exceptions import Throttled
@@ -30,8 +32,12 @@ class LoginView(APIView):
     throttle_scope = "login"
 
     def throttled(self, request, wait):
-        seconds = max(int(wait or 0), 1)
-        raise Throttled(wait=wait, detail=f"Trop de tentatives de connexion. Réessayez dans {seconds} seconde{'s' if seconds > 1 else ''}.")
+        # Arrondi vers le haut, comme DRF, pour que le message et l'en-tête Retry-After donnent le même délai.
+        seconds = max(math.ceil(wait or 0), 1)
+        exc = Throttled(detail=f"Trop de tentatives de connexion. Réessayez dans {seconds} seconde{'s' if seconds > 1 else ''}.")
+        # wait est renseigné après coup : passé au constructeur, DRF ajouterait sa propre phrase au message.
+        exc.wait = seconds
+        raise exc
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
