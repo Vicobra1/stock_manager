@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.test import TestCase
@@ -65,6 +67,32 @@ class RoleTests(TestCase):
         sale = self.call(self.seller, "post", f"/api/products/{self.product.id}/sale/", {"quantity": 2})
         self.assertEqual(sale.status_code, 201)
         self.assertEqual(sale.json()["product"]["quantity"], 8)
+
+    def test_seller_always_sells_at_the_catalogue_price(self):
+        response = self.call(self.seller, "post", f"/api/products/{self.product.id}/sale/", {"quantity": 1, "unit_price": "1"})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(Decimal(response.json()["movement"]["unit_price"]), Decimal("150"))
+
+    def test_manager_can_still_set_a_sale_price(self):
+        response = self.call(self.manager, "post", f"/api/products/{self.product.id}/sale/", {"quantity": 1, "unit_price": "120"})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(Decimal(response.json()["movement"]["unit_price"]), Decimal("120"))
+
+    def test_seller_never_receives_the_purchase_price(self):
+        listing = self.call(self.seller, "get", "/api/products/").json()
+        rows = listing["results"] if isinstance(listing, dict) else listing
+        detail = self.call(self.seller, "get", f"/api/products/{self.product.id}/").json()
+        sale = self.call(self.seller, "post", f"/api/products/{self.product.id}/sale/", {"quantity": 1}).json()
+        for where, product in (("liste", rows[0]), ("fiche", detail), ("vente", sale["product"])):
+            self.assertNotIn("purchase_price", product, where)
+            self.assertIn("selling_price", product, where)
+
+    def test_manager_still_receives_the_purchase_price(self):
+        listing = self.call(self.manager, "get", "/api/products/").json()
+        rows = listing["results"] if isinstance(listing, dict) else listing
+        self.assertEqual(Decimal(rows[0]["purchase_price"]), Decimal("100"))
+        sale = self.call(self.manager, "post", f"/api/products/{self.product.id}/sale/", {"quantity": 1}).json()
+        self.assertIn("purchase_price", sale["product"])
 
     def test_seller_still_cannot_oversell(self):
         response = self.call(self.seller, "post", f"/api/products/{self.product.id}/sale/", {"quantity": 99})

@@ -1,7 +1,9 @@
 const API = '/api'
 const TOKEN_KEY = 'stock-boutique-token'
 
-export type User = { id: number; username: string; first_name: string; last_name: string; is_staff: boolean }
+export type Role = 'manager' | 'seller'
+export const ROLE_LABELS: Record<Role, string> = { manager: 'Gérant', seller: 'Vendeur' }
+export type User = { id: number; username: string; first_name: string; last_name: string; is_staff: boolean; role: Role | null }
 
 export function getToken() {
   try { return localStorage.getItem(TOKEN_KEY) } catch { return null }
@@ -22,6 +24,10 @@ let onUnauthorized: (() => void) | null = null
 /** Enregistre ce qu'il faut faire quand l'API refuse le jeton (session expirée). */
 export function setUnauthorizedHandler(handler: (() => void) | null) { onUnauthorized = handler }
 
+let onForbidden: (() => void) | null = null
+/** Enregistre ce qu'il faut faire quand l'API refuse une action faute de droits (rôle retiré en cours de session). */
+export function setForbiddenHandler(handler: (() => void) | null) { onForbidden = handler }
+
 export async function request(path: string, init?: RequestInit) {
   const token = getToken() ?? memoryToken
   const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Token ${token}` } : {}), ...init?.headers }
@@ -32,6 +38,7 @@ export async function request(path: string, init?: RequestInit) {
     onUnauthorized?.()
     throw new Error('Votre session a expiré. Veuillez vous reconnecter.')
   }
+  if (response.status === 403) onForbidden?.()
   if (!response.ok) throw new Error(data.detail || Object.values(data).flat().join(' ') || 'Une erreur est survenue.')
   return data
 }

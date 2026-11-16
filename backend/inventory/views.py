@@ -13,7 +13,7 @@ from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from .models import Product, Supplier, StockMovement
-from .roles import IsManager, IsManagerOrSeller
+from .roles import ROLE_MANAGER, IsManager, IsManagerOrSeller, get_role
 from .serializers import ProductSerializer, SupplierSerializer, StockMovementSerializer
 
 
@@ -91,13 +91,18 @@ class ProductViewSet(viewsets.ModelViewSet):
         delta = quantity if movement_type == StockMovement.MovementType.ENTRY else -quantity
         Product.objects.filter(pk=product.pk).update(quantity=F("quantity") + delta)
         product.refresh_from_db()
+        catalogue_price = product.selling_price if movement_type == StockMovement.MovementType.SALE else None
+        # Seul le gérant peut fixer un autre prix (remise…) ; un vendeur vend toujours au prix du catalogue,
+        # sinon il pourrait déclarer un prix plus bas que celui encaissé.
+        unit_price = request.data.get("unit_price", catalogue_price) if get_role(request.user) == ROLE_MANAGER else catalogue_price
         movement = StockMovement.objects.create(
             product=product, movement_type=movement_type, quantity=quantity,
-            unit_price=request.data.get("unit_price", product.selling_price if movement_type == StockMovement.MovementType.SALE else None),
+            unit_price=unit_price,
             note=request.data.get("note", ""),
         )
         return Response({"movement": StockMovementSerializer(movement).data,
-                         "product": ProductSerializer(product).data}, status=status.HTTP_201_CREATED)
+                         "product": ProductSerializer(product, context={"request": request}).data},
+                        status=status.HTTP_201_CREATED)
 
 
 class MovementPagination(LimitOffsetPagination):
@@ -218,7 +223,7 @@ class DashboardView(APIView):
             "today": {"revenue": today_totals["revenue"] or zero, "profit": today_totals["profit"] or zero,
                       "units": today_totals["units"] or 0},
             "last_7_days": last_7_days,
-            "low_stock_products": ProductSerializer(low_stock[:5], many=True).data,
+            "low_stock_products": ProductSerializer(low_stock[:5], many=True, context={"request": request}).data,
             "top_products": [{"product": r["product"], "name": r["product__name"],
                               "reference": r["product__reference"], "units": r["units"], "revenue": r["revenue"]}
                              for r in top_products],
