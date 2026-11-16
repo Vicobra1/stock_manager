@@ -9,6 +9,8 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from .roles import get_role
+
 
 class UserSerializer(serializers.Serializer):
     id = serializers.IntegerField()
@@ -16,6 +18,10 @@ class UserSerializer(serializers.Serializer):
     first_name = serializers.CharField()
     last_name = serializers.CharField()
     is_staff = serializers.BooleanField()
+    role = serializers.SerializerMethodField()
+
+    def get_role(self, user):
+        return get_role(user)
 
 
 class LoginSerializer(serializers.Serializer):

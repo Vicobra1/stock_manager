@@ -1,6 +1,7 @@
 import re
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.cache import cache
 from django.test import TestCase
 
@@ -12,6 +13,7 @@ class AuthTests(TestCase):
     def setUp(self):
         cache.clear()  # le compteur de tentatives de connexion ne doit pas passer d'un test à l'autre
         self.user = User.objects.create_user("gerant", password=PASSWORD, first_name="Awa", is_staff=True)
+        self.user.groups.add(Group.objects.get(name="Gérant"))
 
     def login(self, **overrides):
         return self.client.post("/api/auth/login/", {"username": "gerant", "password": PASSWORD, **overrides},
@@ -26,7 +28,7 @@ class AuthTests(TestCase):
         body = response.json()
         self.assertTrue(body["token"])
         self.assertEqual(body["user"], {"id": self.user.id, "username": "gerant", "first_name": "Awa",
-                                        "last_name": "", "is_staff": True})
+                                        "last_name": "", "is_staff": True, "role": "manager"})
 
     def test_login_twice_reuses_the_same_token(self):
         self.assertEqual(self.login().json()["token"], self.login().json()["token"])

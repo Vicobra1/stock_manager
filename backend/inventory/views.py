@@ -13,6 +13,7 @@ from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from .models import Product, Supplier, StockMovement
+from .roles import IsManager, IsManagerOrSeller
 from .serializers import ProductSerializer, SupplierSerializer, StockMovementSerializer
 
 
@@ -22,11 +23,20 @@ class SupplierViewSet(viewsets.ModelViewSet):
     search_fields = ["name", "phone", "email"]
     ordering_fields = ["name", "created_at"]
 
+    def get_permissions(self):
+        # Lecture : gérant et vendeur. Création, modification, suppression : gérant seulement.
+        return [(IsManagerOrSeller if self.action in ("list", "retrieve") else IsManager)()]
+
 
 class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
     search_fields = ["name", "reference", "supplier__name"]
     ordering_fields = ["name", "quantity", "selling_price", "created_at"]
+
+    def get_permissions(self):
+        # Lecture et vente : gérant et vendeur. Le reste (fiches, entrées de stock, suppression) : gérant seulement.
+        allowed = ("list", "retrieve", "sale")
+        return [(IsManagerOrSeller if self.action in allowed else IsManager)()]
 
     def get_queryset(self):
         queryset = Product.objects.select_related("supplier")
@@ -108,6 +118,7 @@ class StockMovementViewSet(viewsets.ReadOnlyModelViewSet):
     """
     serializer_class = StockMovementSerializer
     pagination_class = MovementPagination
+    permission_classes = [IsManagerOrSeller]
 
     def get_queryset(self):
         params = self.request.query_params
@@ -164,7 +175,8 @@ def _sales_amounts():
 
 
 class DashboardView(APIView):
-    """Indicateurs du tableau de bord (un seul appel pour tout l'écran)."""
+    """Indicateurs du tableau de bord (un seul appel pour tout l'écran). Réservé au gérant : il expose bénéfices et valeur du stock."""
+    permission_classes = [IsManager]
 
     def get(self, request):
         zero = Decimal("0")

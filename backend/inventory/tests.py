@@ -2,6 +2,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
@@ -24,10 +25,11 @@ def make_movement(product, movement_type, quantity, days_ago=0, unit_price=None,
 
 
 class AuthenticatedTestCase(TestCase):
-    """Toute l'API exige un jeton : chaque requête du client de test l'envoie."""
+    """Toute l'API exige un jeton : chaque requête du client de test l'envoie (en tant que gérant)."""
 
     def setUp(self):
         user = get_user_model().objects.create_user("testeur", password="mot-de-passe-de-test-123")
+        user.groups.add(Group.objects.get(name="Gérant"))
         self.client.defaults["HTTP_AUTHORIZATION"] = f"Token {Token.objects.create(user=user).key}"
 
 
