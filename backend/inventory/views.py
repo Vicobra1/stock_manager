@@ -13,7 +13,7 @@ from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from .models import Product, Supplier, StockMovement
-from .roles import IsManager, IsManagerOrSeller
+from .roles import ROLE_MANAGER, IsManager, IsManagerOrSeller, get_role
 from .serializers import ProductSerializer, SupplierSerializer, StockMovementSerializer
 
 
@@ -91,9 +91,13 @@ class ProductViewSet(viewsets.ModelViewSet):
         delta = quantity if movement_type == StockMovement.MovementType.ENTRY else -quantity
         Product.objects.filter(pk=product.pk).update(quantity=F("quantity") + delta)
         product.refresh_from_db()
+        catalogue_price = product.selling_price if movement_type == StockMovement.MovementType.SALE else None
+        # Seul le gérant peut fixer un autre prix (remise…) ; un vendeur vend toujours au prix du catalogue,
+        # sinon il pourrait déclarer un prix plus bas que celui encaissé.
+        unit_price = request.data.get("unit_price", catalogue_price) if get_role(request.user) == ROLE_MANAGER else catalogue_price
         movement = StockMovement.objects.create(
             product=product, movement_type=movement_type, quantity=quantity,
-            unit_price=request.data.get("unit_price", product.selling_price if movement_type == StockMovement.MovementType.SALE else None),
+            unit_price=unit_price,
             note=request.data.get("note", ""),
         )
         return Response({"movement": StockMovementSerializer(movement).data,
