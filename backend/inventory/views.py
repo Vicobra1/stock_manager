@@ -101,7 +101,8 @@ class ProductViewSet(viewsets.ModelViewSet):
             note=request.data.get("note", ""),
         )
         return Response({"movement": StockMovementSerializer(movement).data,
-                         "product": ProductSerializer(product).data}, status=status.HTTP_201_CREATED)
+                         "product": ProductSerializer(product, context={"request": request}).data},
+                        status=status.HTTP_201_CREATED)
 
 
 class MovementPagination(LimitOffsetPagination):
@@ -222,7 +223,7 @@ class DashboardView(APIView):
             "today": {"revenue": today_totals["revenue"] or zero, "profit": today_totals["profit"] or zero,
                       "units": today_totals["units"] or 0},
             "last_7_days": last_7_days,
-            "low_stock_products": ProductSerializer(low_stock[:5], many=True).data,
+            "low_stock_products": ProductSerializer(low_stock[:5], many=True, context={"request": request}).data,
             "top_products": [{"product": r["product"], "name": r["product__name"],
                               "reference": r["product__reference"], "units": r["units"], "revenue": r["revenue"]}
                              for r in top_products],
