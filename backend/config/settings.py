@@ -82,6 +82,9 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        # Base de test sur fichier : la base en mémoire partagée verrouille des tables entières entre threads,
+        # ce qui rend impossibles les tests de concurrence (saas_acceptance/test_concurrency.py).
+        'TEST': {'NAME': BASE_DIR / 'test_db.sqlite3'},
     }
 }
 
