@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.core.validators import MinValueValidator
 
@@ -60,3 +61,45 @@ class StockMovement(models.Model):
 
     def __str__(self):
         return f"{self.get_movement_type_display()} — {self.product} × {self.quantity}"
+
+
+class Shop(models.Model):
+    """Une boutique cliente du service. Ses données sont isolées de celles des autres boutiques."""
+
+    class Plan(models.TextChoices):
+        FREE = "free", "Gratuit"
+        PRO = "pro", "Pro"
+
+    name = models.CharField(max_length=150)
+    plan = models.CharField(max_length=10, choices=Plan.choices, default=Plan.FREE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "boutique"
+
+    def __str__(self):
+        return self.name
+
+
+class Membership(models.Model):
+    """Appartenance d'un utilisateur à une boutique, avec son rôle dans CETTE boutique (décision D3, option R1)."""
+
+    class Role(models.TextChoices):
+        MANAGER = "manager", "Gérant"
+        SELLER = "seller", "Vendeur"
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="memberships")
+    shop = models.ForeignKey(Shop, on_delete=models.CASCADE, related_name="memberships")
+    role = models.CharField(max_length=10, choices=Role.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "membre"
+        constraints = [
+            # Un seul rôle par personne et par boutique, garanti par la base elle-même.
+            models.UniqueConstraint(fields=["user", "shop"], name="unique_membership_per_shop"),
+        ]
+
+    def __str__(self):
+        return f"{self.user} · {self.shop} · {self.get_role_display()}"
