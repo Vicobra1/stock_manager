@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import os
+from datetime import timedelta
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -136,9 +137,13 @@ MAILERS = {
 }
 
 CORS_ALLOWED_ORIGINS = ['http://localhost:5173']
+# Durée de vie fixe des jetons (compte et boutique), comptée depuis leur création (décision D2).
+TOKEN_LIFETIME = timedelta(hours=12)
+
 REST_FRAMEWORK = {
     # Toute l'API exige l'en-tête « Authorization: Token <clé> », sauf /api/auth/login/.
-    'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.TokenAuthentication'],
+    # Jeton « compte » ou jeton de boutique, tous deux refusés une fois expirés.
+    'DEFAULT_AUTHENTICATION_CLASSES': ['inventory.authentication.ExpiringTokenAuthentication'],
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
     # Nombre maximal de tentatives de connexion par adresse IP.
     'DEFAULT_THROTTLE_RATES': {'login': '5/min'},

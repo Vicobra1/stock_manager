@@ -9,6 +9,8 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from .authentication import is_expired
+from .models import Membership, ShopToken
 from .roles import get_role
 
 
@@ -52,15 +54,20 @@ class LoginView(APIView):
         if user is None:
             return Response({"detail": "Identifiants invalides."}, status=status.HTTP_400_BAD_REQUEST)
         token, _ = Token.objects.get_or_create(user=user)
+        if is_expired(token.created):
+            # Jeton « compte » à durée fixe (décision D2) : une fois expiré, la connexion en donne un nouveau.
+            token.delete()
+            token = Token.objects.create(user=user)
         return Response({"token": token.key, "user": UserSerializer(user).data})
 
 
 class LogoutView(APIView):
-    """POST -> 204. Supprime le jeton : il ne fonctionne plus, sur tous les appareils."""
+    """POST -> 204. Coupe tout (décision D2) : le jeton « compte » et tous les jetons de boutique de la personne."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         Token.objects.filter(user=request.user).delete()
+        ShopToken.objects.filter(user=request.user).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -70,3 +77,41 @@ class MeView(APIView):
 
     def get(self, request):
         return Response(UserSerializer(request.user).data)
+
+
+def shop_summary(membership):
+    return {"id": membership.shop.id, "name": membership.shop.name, "plan": membership.shop.plan,
+            "role": membership.role}
+
+
+class MyShopsView(APIView):
+    """GET -> les boutiques dont la personne est membre, avec son rôle dans chacune (choix de la boutique)."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        memberships = Membership.objects.filter(user=request.user).select_related("shop").order_by("shop__name")
+        return Response([shop_summary(m) for m in memberships])
+
+
+class ShopTokenSerializer(serializers.Serializer):
+    shop = serializers.IntegerField()
+
+
+class ShopTokenView(APIView):
+    """POST {shop} -> 201 {token, expires_at, shop}. Second temps de la connexion (décision D2).
+
+    Une boutique inexistante et une boutique dont on n'est pas membre donnent exactement la même réponse 404 :
+    rien ne permet de deviner qu'une boutique existe.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = ShopTokenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        membership = (Membership.objects.select_related("shop")
+                      .filter(user=request.user, shop_id=serializer.validated_data["shop"]).first())
+        if membership is None:
+            return Response({"detail": "Boutique introuvable."}, status=status.HTTP_404_NOT_FOUND)
+        token = ShopToken.objects.create(user=request.user, shop=membership.shop)
+        return Response({"token": token.key, "expires_at": token.expires_at, "shop": shop_summary(membership)},
+                        status=status.HTTP_201_CREATED)

@@ -1,3 +1,5 @@
+import secrets
+
 from django.conf import settings
 from django.db import models
 from django.db.models.functions import Lower
@@ -109,3 +111,32 @@ class Membership(models.Model):
 
     def __str__(self):
         return f"{self.user} · {self.shop} · {self.get_role_display()}"
+
+
+class ShopToken(models.Model):
+    """Jeton de connexion propre à une boutique (décision D2) : il désigne à la fois l'utilisateur et la boutique.
+
+    Valable settings.TOKEN_LIFETIME (12 h) après sa création, quelle que soit son utilisation. L'appartenance et le
+    rôle ne sont pas figés dans le jeton : ils sont relus à chaque requête.
+    """
+
+    key = models.CharField(max_length=40, unique=True, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="shop_tokens")
+    shop = models.ForeignKey(Shop, on_delete=models.CASCADE, related_name="tokens")
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)  # suivi des connexions, sans effet sur l'expiration
+
+    class Meta:
+        verbose_name = "jeton de boutique"
+
+    def save(self, *args, **kwargs):
+        if not self.key:
+            self.key = secrets.token_hex(20)
+        super().save(*args, **kwargs)
+
+    @property
+    def expires_at(self):
+        return self.created_at + settings.TOKEN_LIFETIME
+
+    def __str__(self):
+        return f"{self.user} · {self.shop}"
