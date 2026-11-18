@@ -13,6 +13,10 @@ class ShopModelTests(TestCase):
         self.shop_b = Shop.objects.create(name="Boutique B", plan=Shop.Plan.PRO)
         self.user = User.objects.create_user("awa")
 
+    def test_two_shops_cannot_share_a_name_whatever_the_case(self):
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Shop.objects.create(name="boutique a")
+
     def test_a_new_shop_starts_on_the_free_plan(self):
         self.assertEqual(self.shop_a.plan, Shop.Plan.FREE)
 

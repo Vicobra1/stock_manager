@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.db.models.functions import Lower
 from django.core.validators import MinValueValidator
 
 
@@ -77,6 +78,11 @@ class Shop(models.Model):
     class Meta:
         ordering = ["name"]
         verbose_name = "boutique"
+        constraints = [
+            # Deux boutiques ne peuvent pas porter le même nom, majuscules comprises (décision D3b).
+            models.UniqueConstraint(Lower("name"), name="unique_shop_name_case_insensitive",
+                                    violation_error_message="Une boutique porte déjà ce nom."),
+        ]
 
     def __str__(self):
         return self.name
