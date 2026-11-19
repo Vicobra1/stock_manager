@@ -40,6 +40,11 @@ class SignupTests(TestCase):
         self.assertFalse(User.objects.filter(username="awa").exists())
         self.assertFalse(Shop.objects.exists())
 
+    def test_all_form_errors_are_reported_at_once(self):
+        Shop.objects.create(name="Chez Awa")
+        response = self.signup(password="12345678")
+        self.assertEqual(set(response.json()), {"shop_name", "password"})
+
     def test_a_password_too_close_to_the_username_is_refused(self):
         self.assertEqual(self.signup(username="boutiquier", password="boutiquier1").status_code, 400)
 

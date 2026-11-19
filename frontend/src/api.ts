@@ -65,6 +65,17 @@ export function setShopRequiredHandler(handler: (() => void) | null) { onShopReq
 
 const CHOOSE_SHOP = "Choisissez d'abord une boutique."
 
+/** Erreur de l'API, avec le code et le contenu de la réponse (utile pour afficher les erreurs champ par champ). */
+export class ApiError extends Error {
+  status: number
+  data: unknown
+  constructor(message: string, status: number, data: unknown) {
+    super(message)
+    this.status = status
+    this.data = data
+  }
+}
+
 export async function request(path: string, init?: RequestInit) {
   // Le jeton de boutique s'il y en a un (API métier) ; sinon le jeton « compte » (choix de la boutique).
   const token = getShopToken() ?? getToken()
@@ -81,7 +92,7 @@ export async function request(path: string, init?: RequestInit) {
     onShopRequired?.()
   } else if (response.status === 403 && data.code !== 'quota_exceeded') onForbidden?.()
   if (response.status === 404) onNotFound?.()
-  if (!response.ok) throw new Error(data.detail || Object.values(data).flat().join(' ') || 'Une erreur est survenue.')
+  if (!response.ok) throw new ApiError(data.detail || Object.values(data).flat().join(' ') || 'Une erreur est survenue.', response.status, data)
   return data
 }
 

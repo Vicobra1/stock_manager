@@ -42,3 +42,10 @@
 .shop-name{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#eceaf3;font-size:13px;font-weight:700}
 .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 @media(max-width:600px){.shop-switcher select,.shop-name{max-width:96px;font-size:12px}.user-box{gap:6px;min-width:0}.user-box .avatar{display:none}}
+
+/* Inscription */
+.login-card .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field-error{color:#ff9fa5;font-size:11px;font-weight:500}.field-hint{color:#7f808c;font-size:11px;font-weight:400}
+.login-switch{margin:16px 0 0;text-align:center;color:#9798a3;font-size:13px}
+.link-button{background:none;border:0;padding:0;color:#b39bff;font:inherit;font-weight:600;cursor:pointer}.link-button:hover{text-decoration:underline}
+@media(max-width:600px){.login-card .form-row{grid-template-columns:1fr;gap:0}}

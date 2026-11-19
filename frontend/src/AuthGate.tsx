@@ -3,6 +3,7 @@ import App from './App'
 import Login from './Login'
 import NoRole from './NoRole'
 import ShopChooser from './ShopChooser'
+import Signup from './Signup'
 import {
   clearShopSession, clearToken, getShopId, getShopToken, getToken, request, setForbiddenHandler,
   setNotFoundHandler, setShopRequiredHandler, setShopSession, setToken, setUnauthorizedHandler, type ShopSummary, type User,
@@ -15,6 +16,7 @@ export default function AuthGate() {
   const [shop, setShop] = useState<ShopSummary | null>(null)
   const [checking, setChecking] = useState(() => getToken() !== null)
   const [notice, setNotice] = useState('')
+  const [signingUp, setSigningUp] = useState(false)
   const started = useRef(false)
 
   async function chooseShop(target: ShopSummary) {
@@ -81,6 +83,7 @@ export default function AuthGate() {
   }, [])
 
   async function onLogin(token: string) {
+    setSigningUp(false)
     clearShopSession()  // un ancien jeton de boutique de cet onglet ne doit pas être réutilisé
     setToken(token)
     setNotice('')
@@ -99,7 +102,11 @@ export default function AuthGate() {
   }
 
   if (checking) return <main className="login-page"><p className="login-subtitle">Chargement…</p></main>
-  if (!user || !shops) return <Login notice={notice} onLogin={token => void onLogin(token)} />
+  if (!user || !shops) {
+    // L'inscription connecte directement : elle reprend le même chemin que la connexion.
+    if (signingUp) return <Signup onSignedUp={token => void onLogin(token)} onBack={() => setSigningUp(false)} />
+    return <Login notice={notice} onLogin={token => void onLogin(token)} onShowSignup={() => { setNotice(''); setSigningUp(true) }} />
+  }
   if (shops.length === 0) return <NoRole user={user} onLogout={() => void logout()} />
   if (!shop) return <ShopChooser user={user} shops={shops} notice={notice} onChoose={chooseShop} onLogout={() => void logout()} />
   // L'application reçoit le rôle de la boutique en cours.

@@ -184,15 +184,17 @@ class SignupSerializer(serializers.Serializer):
             raise serializers.ValidationError("Ce nom d'utilisateur est déjà pris.")
         return value
 
-    def validate(self, attrs):
+    def validate_password(self, value):
         # Règles de mot de passe de Django (décision D6, M1), y compris « trop proche du nom d'utilisateur ».
-        candidate = get_user_model()(username=attrs["username"], first_name=attrs["first_name"],
-                                     last_name=attrs.get("last_name", ""))
+        # Vérifiées avec les autres champs (et non après) : toutes les erreurs du formulaire arrivent en une fois.
+        data = self.initial_data
+        candidate = get_user_model()(username=str(data.get("username", "")), first_name=str(data.get("first_name", "")),
+                                     last_name=str(data.get("last_name", "")))
         try:
-            validate_password(attrs["password"], user=candidate)
+            validate_password(value, user=candidate)
         except DjangoValidationError as exc:
-            raise serializers.ValidationError({"password": list(exc.messages)})
-        return attrs
+            raise serializers.ValidationError(list(exc.messages))
+        return value
 
 
 class SignupView(FrenchThrottleMixin, APIView):
