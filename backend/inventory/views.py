@@ -61,7 +61,7 @@ class ProductViewSet(ShopScopedViewSet, viewsets.ModelViewSet):
             raise ValidationError({"initial_quantity": "La quantité initiale doit être un entier positif ou nul."})
         with transaction.atomic():
             if serializer.validated_data.get("is_active", True):
-                # Quota (D5) : « ticket » de la boutique, puis comptage ; un refus 402 annule tout (rien n'est créé).
+                # Quota (D5) : « ticket » de la boutique, puis comptage ; un refus (403, quota_exceeded) annule tout (rien n'est créé).
                 lock_shop(self.shop)
                 ensure_product_slot(self.shop)
             product = serializer.save(quantity=quantity, shop=self.shop)

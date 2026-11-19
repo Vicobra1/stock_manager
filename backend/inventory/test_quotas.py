@@ -37,18 +37,35 @@ class ProductQuotaTests(QuotaHelpers, TestCase):
     def setUp(self):
         self.setup_shop()
 
-    def test_the_free_plan_stops_at_20_active_products_with_a_402(self):
+    def test_the_free_plan_stops_at_20_active_products_with_a_403(self):
         self.fill(FREE_PRODUCTS - 1)
         self.assertEqual(self.create("DERNIERE").status_code, 201)
         refused = self.create("DE-TROP")
-        self.assertEqual(refused.status_code, 402)
-        self.assertEqual(refused.json()["detail"], "Limite du plan gratuit atteinte : 20 produits actifs. "
-                                                   "Désactivez un produit ou passez au plan Pro.")
+        self.assertEqual(refused.status_code, 403)
+        self.assertEqual(refused.json(), {"detail": "Limite du plan gratuit atteinte : 20 produits actifs. "
+                                                    "Désactivez un produit ou passez au plan Pro.",
+                                          "code": "quota_exceeded"})
+
+    def test_a_quota_refusal_is_distinguishable_from_a_rights_refusal(self):
+        self.fill(FREE_PRODUCTS)
+        seller = User.objects.create_user("vendeur")
+        Membership.objects.create(user=seller, shop=self.shop, role=Membership.Role.SELLER)
+        seller_token = ShopToken.objects.create(user=seller, shop=self.shop).key
+        rights = self.client.get("/api/dashboard/", HTTP_AUTHORIZATION=f"Token {seller_token}")
+        quota = self.create("DE-TROP")
+        self.assertEqual((rights.status_code, quota.status_code), (403, 403))
+        self.assertNotIn("code", rights.json())
+        self.assertEqual(quota.json()["code"], "quota_exceeded")
+
+    def test_messages_can_be_changed_in_one_place(self):
+        self.fill(FREE_PRODUCTS)
+        with mock.patch.dict(quotas.QUOTA_MESSAGES, {("products", Shop.Plan.FREE): "Plus de place ({limit})."}):
+            self.assertEqual(self.create("DE-TROP").json()["detail"], "Plus de place (20).")
 
     def test_a_refused_creation_leaves_nothing_behind(self):
         self.fill(FREE_PRODUCTS)
         movements = StockMovement.objects.count()
-        self.assertEqual(self.create("DE-TROP", initial_quantity=5).status_code, 402)
+        self.assertEqual(self.create("DE-TROP", initial_quantity=5).status_code, 403)
         self.assertFalse(Product.objects.filter(reference="DE-TROP").exists())
         self.assertEqual(StockMovement.objects.count(), movements)
 
@@ -65,7 +82,7 @@ class ProductQuotaTests(QuotaHelpers, TestCase):
                                      purchase_price=1, selling_price=2, is_active=False)
         response = self.client.patch(f"/api/products/{off.id}/", {"is_active": True}, content_type="application/json",
                                      HTTP_AUTHORIZATION=f"Token {self.token}")
-        self.assertEqual(response.status_code, 402)
+        self.assertEqual(response.status_code, 403)
         off.refresh_from_db()
         self.assertFalse(off.is_active)
 
@@ -82,7 +99,7 @@ class ProductQuotaTests(QuotaHelpers, TestCase):
         self.assertEqual(self.create("PRO-1").status_code, 201)
         set_plan(self.shop, Shop.Plan.FREE)
         self.assertEqual(Product.objects.filter(shop=self.shop, is_active=True).count(), FREE_PRODUCTS + 1)
-        self.assertEqual(self.create("REFUSE").status_code, 402)
+        self.assertEqual(self.create("REFUSE").status_code, 403)
         listing = self.client.get("/api/products/", {"active": "true"}, HTTP_AUTHORIZATION=f"Token {self.token}")
         self.assertEqual(len(listing.json()), FREE_PRODUCTS + 1)
 
@@ -146,5 +163,5 @@ class SimultaneousCreationTests(QuotaHelpers, TransactionTestCase):
         threads = [threading.Thread(target=create, args=(n,)) for n in range(8)]
         [t.start() for t in threads]
         [t.join(timeout=30) for t in threads]
-        self.assertEqual(sorted(statuses, key=str), sorted([201] + [402] * 7, key=str), statuses)
+        self.assertEqual(sorted(statuses, key=str), sorted([201] + [403] * 7, key=str), statuses)
         self.assertEqual(Product.objects.filter(shop=self.shop, is_active=True).count(), FREE_PRODUCTS)

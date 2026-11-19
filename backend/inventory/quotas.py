@@ -6,7 +6,8 @@
   et la seconde voit la création de la première. Avec SQLite, cette écriture prend le verrou d'écriture de la base ;
   avec PostgreSQL, elle verrouille la seule ligne de la boutique (les autres boutiques ne sont pas bloquées).
   Seules les actions soumises à quota passent par là : créer ou réactiver un produit actif, ajouter un membre.
-- Refus : code 402 (option choisie) pour distinguer une limite de plan d'un manque de droits (403).
+- Refus : code 403 (option choisie), avec "code": "quota_exceeded" dans la réponse pour que l'interface distingue
+  un refus de quota d'un refus de droits. Les messages se modifient ci-dessous (QUOTA_MESSAGES).
 """
 from django.db import transaction
 from django.db.models import F
@@ -20,15 +21,34 @@ PLAN_LIMITS = {
 }
 PLAN_LABELS = {Shop.Plan.FREE: "gratuit", Shop.Plan.PRO: "Pro"}
 
+# Messages affichés quand une limite est atteinte : à modifier librement ici.
+# Variables disponibles : {plan} (gratuit / Pro) et {limit} (la limite du plan).
+QUOTA_MESSAGES = {
+    ("products", Shop.Plan.FREE): "Limite du plan {plan} atteinte : {limit} produits actifs. "
+                                  "Désactivez un produit ou passez au plan Pro.",
+    ("products", Shop.Plan.PRO): "Limite du plan {plan} atteinte : {limit} produits actifs. "
+                                 "Désactivez un produit pour libérer une place.",
+    ("members", Shop.Plan.FREE): "Limite du plan {plan} atteinte : {limit} membres. Passez au plan Pro pour en ajouter.",
+    ("members", Shop.Plan.PRO): "Limite du plan {plan} atteinte : {limit} membres.",
+}
+QUOTA_CODE = "quota_exceeded"
+
 
 class QuotaExceeded(APIException):
-    status_code = 402
-    default_detail = "Limite du plan atteinte."
-    default_code = "quota_exceeded"
+    """Refus 403 avec un code dédié : {"detail": "<message>", "code": "quota_exceeded"}."""
+    status_code = 403
+    default_code = QUOTA_CODE
+
+    def __init__(self, message):
+        super().__init__({"detail": message, "code": QUOTA_CODE})
 
 
 def limits(shop):
     return PLAN_LIMITS[shop.plan]
+
+
+def quota_message(kind, shop):
+    return QUOTA_MESSAGES[(kind, shop.plan)].format(plan=PLAN_LABELS[shop.plan], limit=limits(shop)[kind])
 
 
 def lock_shop(shop):
@@ -42,20 +62,15 @@ def lock_shop(shop):
 
 
 def ensure_product_slot(shop):
-    """Refuse (402) si la boutique a déjà atteint sa limite de produits actifs. Appeler après lock_shop()."""
-    limit = limits(shop)["products"]
-    if Product.objects.filter(shop=shop, is_active=True).count() >= limit:
-        upgrade = " Désactivez un produit ou passez au plan Pro." if shop.plan == Shop.Plan.FREE else \
-            " Désactivez un produit pour libérer une place."
-        raise QuotaExceeded(f"Limite du plan {PLAN_LABELS[shop.plan]} atteinte : {limit} produits actifs.{upgrade}")
+    """Refuse (403, quota_exceeded) si la limite de produits actifs est atteinte. Appeler après lock_shop()."""
+    if Product.objects.filter(shop=shop, is_active=True).count() >= limits(shop)["products"]:
+        raise QuotaExceeded(quota_message("products", shop))
 
 
 def ensure_member_slot(shop):
-    """Refuse (402) si la boutique a déjà atteint sa limite de membres. Appeler après lock_shop()."""
-    limit = limits(shop)["members"]
-    if Membership.objects.filter(shop=shop).count() >= limit:
-        upgrade = " Passez au plan Pro pour en ajouter." if shop.plan == Shop.Plan.FREE else ""
-        raise QuotaExceeded(f"Limite du plan {PLAN_LABELS[shop.plan]} atteinte : {limit} membres.{upgrade}")
+    """Refuse (403, quota_exceeded) si la limite de membres est atteinte. Appeler après lock_shop()."""
+    if Membership.objects.filter(shop=shop).count() >= limits(shop)["members"]:
+        raise QuotaExceeded(quota_message("members", shop))
 
 
 @transaction.atomic
