@@ -11,9 +11,13 @@ Règles :
   Si tu contournes ton propre code (ex. écrire en base ce que l'API devrait empêcher), le test ne prouve plus rien.
 - Ne modifie pas les fichiers test_*.py ni support.py. Si un test te semble faux, argumente-le dans ton ADR.
 """
-from rest_framework.test import APIClient  # noqa: F401  (à utiliser dans client())
+from django.contrib.auth import get_user_model
+from rest_framework.test import APIClient
 
-IMPLEMENTED = False
+from inventory import quotas
+from inventory.models import ShopToken
+
+IMPLEMENTED = True
 
 # Limites du plan gratuit (les tests s'appuient sur ces valeurs ; le plan « pro » est très au-dessus).
 FREE_MAX_PRODUCTS = 20  # produits ACTIFS par boutique
@@ -30,7 +34,7 @@ def create_shop(name, owner_username):
     Crée l'utilisateur s'il n'existe pas (aucun mot de passe nécessaire). Retourne un objet opaque (« shop »)
     que les tests repassent tels quels aux autres fonctions.
     """
-    raise NotImplementedError
+    return quotas.create_shop(name, _user(owner_username))
 
 
 def add_member(shop, username, role):
@@ -38,12 +42,15 @@ def add_member(shop, username, role):
 
     Lève QuotaExceeded si la limite de membres du plan est atteinte.
     """
-    raise NotImplementedError
+    try:
+        return quotas.add_member(shop, _user(username), role)  # le quota est vérifié par le code de l'application
+    except quotas.QuotaExceeded as exc:
+        raise QuotaExceeded(str(exc.detail["detail"])) from exc
 
 
 def set_plan(shop, plan):
     """Passe la boutique au plan "free" ou "pro"."""
-    raise NotImplementedError
+    return quotas.set_plan(shop, plan)
 
 
 def shop_ref(shop):
@@ -52,7 +59,7 @@ def shop_ref(shop):
     Les tests l'injectent dans des corps de requête pour vérifier qu'un client ne peut pas choisir sa boutique
     en la déclarant dans les données envoyées.
     """
-    raise NotImplementedError
+    return shop.id
 
 
 def client(username, shop):
@@ -62,4 +69,13 @@ def client(username, shop):
     les requêtes qu'enverrait un client qui prétend agir dans cette boutique (c'est ton API qui doit le refuser
     si l'utilisateur n'en est pas membre). Un nouveau client à chaque appel.
     """
-    raise NotImplementedError
+    # Jeton de boutique créé directement, SANS vérifier l'appartenance : c'est l'API qui doit refuser un non-membre.
+    token = ShopToken.objects.create(user=_user(username), shop=shop)
+    api = APIClient()
+    api.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+    return api
+
+
+def _user(username):
+    """Compte de test sans mot de passe, créé s'il n'existe pas."""
+    return get_user_model().objects.get_or_create(username=username)[0]
