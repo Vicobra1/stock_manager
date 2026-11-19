@@ -17,6 +17,11 @@ class ShopModelTests(TestCase):
         with self.assertRaises(IntegrityError), transaction.atomic():
             Shop.objects.create(name="boutique a")
 
+    def test_the_rule_also_holds_for_accented_letters(self):
+        Shop.objects.create(name="Première")
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Shop.objects.create(name="PREMIÈRE")
+
     def test_a_new_shop_starts_on_the_free_plan(self):
         self.assertEqual(self.shop_a.plan, Shop.Plan.FREE)
 

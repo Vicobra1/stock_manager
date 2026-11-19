@@ -2,7 +2,6 @@ import secrets
 
 from django.conf import settings
 from django.db import models
-from django.db.models.functions import Lower
 from django.core.validators import MinValueValidator
 
 
@@ -84,17 +83,24 @@ class Shop(models.Model):
         PRO = "pro", "Pro"
 
     name = models.CharField(max_length=150)
+    # Nom normalisé (minuscules, accents compris) : c'est lui que la base garde unique (décision D3b).
+    # SQLite ne sait mettre en minuscules que les lettres sans accent : « Première » et « PREMIÈRE » lui
+    # paraîtraient différents. Python, lui, normalise correctement toutes les lettres.
+    name_key = models.CharField(max_length=150, unique=True, editable=False)
     plan = models.CharField(max_length=10, choices=Plan.choices, default=Plan.FREE)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["name"]
         verbose_name = "boutique"
-        constraints = [
-            # Deux boutiques ne peuvent pas porter le même nom, majuscules comprises (décision D3b).
-            models.UniqueConstraint(Lower("name"), name="unique_shop_name_case_insensitive",
-                                    violation_error_message="Une boutique porte déjà ce nom."),
-        ]
+
+    @staticmethod
+    def normalize_name(name):
+        return name.strip().casefold()
+
+    def save(self, *args, **kwargs):
+        self.name_key = self.normalize_name(self.name)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name
