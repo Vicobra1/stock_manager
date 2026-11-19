@@ -139,5 +139,13 @@ class RoleTests(TestCase):
         detail = self.call(self.seller, "get", "/api/dashboard/").json()["detail"]
         self.assertEqual(detail, "Votre compte n'a pas les droits nécessaires pour cette action.")
 
+    def test_a_supplier_with_products_cannot_be_deleted(self):
+        response = self.call(self.manager, "delete", f"/api/suppliers/{self.supplier.id}/")
+        self.assertEqual((response.status_code, response.json()["detail"]),
+                         (409, "Ce fournisseur a des produits : il ne peut pas être supprimé."))
+        self.assertTrue(Supplier.objects.filter(pk=self.supplier.pk).exists())
+        empty = Supplier.objects.create(shop=self.shop, name="Sans produit")
+        self.assertEqual(self.call(self.manager, "delete", f"/api/suppliers/{empty.id}/").status_code, 204)
+
     def test_anonymous_still_gets_401(self):
         self.assertEqual(self.call(None, "get", "/api/products/").status_code, 401)

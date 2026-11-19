@@ -30,6 +30,14 @@ class SupplierViewSet(ShopScopedViewSet, viewsets.ModelViewSet):
     def get_base_queryset(self):
         return Supplier.objects.all()
 
+    def destroy(self, request, *args, **kwargs):
+        # On ne supprime pas un fournisseur dont la boutique possède des produits (décision F-2) : message clair (409)
+        # au lieu de l'erreur serveur que provoquait la protection de la base.
+        if self.get_object().products.exists():
+            return Response({"detail": "Ce fournisseur a des produits : il ne peut pas être supprimé."},
+                            status=status.HTTP_409_CONFLICT)
+        return super().destroy(request, *args, **kwargs)
+
 
 class ProductViewSet(ShopScopedViewSet, viewsets.ModelViewSet):
     serializer_class = ProductSerializer

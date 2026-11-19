@@ -2,15 +2,17 @@ import { useEffect, useState, type FormEvent } from 'react'
 import './App.css'
 import Dashboard from './Dashboard'
 import Movements from './Movements'
+import Suppliers from './Suppliers'
 import { ROLE_LABELS, request, type ShopSummary, type User } from './api'
 
 type Supplier = { id: number; name: string }
 type Product = { id: number; name: string; reference: string; supplier: number; supplier_name: string; purchase_price: string; selling_price: string; quantity: number; low_stock_threshold: number; is_low_stock: boolean; is_active: boolean }
 
-type Page = 'dashboard' | 'products' | 'movements'
+type Page = 'dashboard' | 'products' | 'suppliers' | 'movements'
 const PAGES: Record<Page, { icon: string; label: string; title: string; subtitle: string }> = {
   dashboard: { icon: '◔', label: 'Tableau de bord', title: 'Tableau de bord', subtitle: 'Ventes, valeur du stock et alertes en un coup d’œil.' },
   products: { icon: '▦', label: 'Produits', title: 'Produits', subtitle: 'Gérez votre catalogue et suivez les quantités disponibles.' },
+  suppliers: { icon: '◫', label: 'Fournisseurs', title: 'Fournisseurs', subtitle: 'Les fournisseurs de la boutique et leurs coordonnées.' },
   movements: { icon: '⇅', label: 'Mouvements', title: 'Historique des mouvements', subtitle: 'Toutes les entrées et ventes, filtrables par type, produit, fournisseur et date.' },
 }
 
@@ -30,6 +32,7 @@ function App({ user, shop, shops, onSwitchShop, onLogout }: {
   const [form, setForm] = useState({ name: '', reference: '', supplier: '', purchase_price: '', selling_price: '', initial_quantity: '0', low_stock_threshold: '5' })
   const [movement, setMovement] = useState<{ product: Product; kind: 'sale' | 'entry' } | null>(null)
   const [moveQty, setMoveQty] = useState('1')
+  const [quickSupplier, setQuickSupplier] = useState<string | null>(null)
 
   async function refresh() {
     try {
@@ -40,10 +43,10 @@ function App({ user, shop, shops, onSwitchShop, onLogout }: {
   useEffect(() => { void refresh() }, [includeInactive])
 
   function openNew() {
-    setEditing(null); setForm({ name: '', reference: '', supplier: '', purchase_price: '', selling_price: '', initial_quantity: '0', low_stock_threshold: '5' }); setShowForm(true)
+    setEditing(null); setQuickSupplier(null); setForm({ name: '', reference: '', supplier: '', purchase_price: '', selling_price: '', initial_quantity: '0', low_stock_threshold: '5' }); setShowForm(true)
   }
   function openEdit(p: Product) {
-    setEditing(p); setForm({ name: p.name, reference: p.reference, supplier: String(p.supplier), purchase_price: p.purchase_price, selling_price: p.selling_price, initial_quantity: '0', low_stock_threshold: String(p.low_stock_threshold) }); setShowForm(true)
+    setEditing(p); setQuickSupplier(null); setForm({ name: p.name, reference: p.reference, supplier: String(p.supplier), purchase_price: p.purchase_price, selling_price: p.selling_price, initial_quantity: '0', low_stock_threshold: String(p.low_stock_threshold) }); setShowForm(true)
   }
   async function saveProduct(e: FormEvent) {
     e.preventDefault(); setBusy(true); setError('')
@@ -86,6 +89,18 @@ function App({ user, shop, shops, onSwitchShop, onLogout }: {
   const current: Page = visiblePages.includes(page) ? page : 'products'
   const saleQty = Number(moveQty) || 0
 
+  // Ajout rapide d'un fournisseur depuis le formulaire produit (décision F-2) : créé puis sélectionné aussitôt.
+  async function addQuickSupplier() {
+    const name = (quickSupplier ?? '').trim()
+    if (!name) return
+    try {
+      const created: Supplier = await request('/suppliers/', { method: 'POST', body: JSON.stringify({ name }) })
+      setSuppliers(current => [...current, created].sort((a, b) => a.name.localeCompare(b.name, 'fr')))
+      setForm(current => ({ ...current, supplier: String(created.id) }))
+      setQuickSupplier(null); setError('')
+    } catch (e) { setError(e instanceof Error ? e.message : 'Ajout du fournisseur impossible.') }
+  }
+
   return <main className="app-shell">
     <aside className="sidebar"><div className="brand"><span className="brand-mark">S</span><span>Stock<span className="brand-light">Boutique</span></span></div><p className="nav-label">GESTION</p>{visiblePages.map(key => <button key={key} className={`nav-item ${current === key ? 'active' : ''}`} onClick={() => setPage(key)}><span>{PAGES[key].icon}</span> {PAGES[key].label}</button>)}<div className="side-note"><span className="status-dot"/> API Django</div></aside>
     <section className="main-area"><header className="topbar"><span className="crumb">Gestion <span>/</span> {PAGES[current].label}</span><div className="user-box">{shops.length > 1
@@ -94,6 +109,7 @@ function App({ user, shop, shops, onSwitchShop, onLogout }: {
       <div className="content"><div className="page-heading"><div><p className="eyebrow">INVENTAIRE</p><h1>{PAGES[current].title}</h1><p className="subtitle">{PAGES[current].subtitle}</p></div>{current === 'products' && isManager && <button className="primary" onClick={openNew}>＋ <span>Nouveau produit</span></button>}</div>
         {current === 'dashboard' && <Dashboard onShowMovements={() => setPage('movements')} />}
         {current === 'movements' && <Movements />}
+        {current === 'suppliers' && <Suppliers canEdit={isManager} onChanged={() => void refresh()} />}
         {current === 'products' && <>
         <div className="stats"><article className="stat-card"><span className="stat-icon purple">▦</span><div><p>Produits actifs</p><strong>{products.length}</strong></div></article><article className="stat-card"><span className="stat-icon amber">↘</span><div><p>Stock faible</p><strong>{lowCount}</strong></div></article><article className="stat-card"><span className="stat-icon green">▤</span><div><p>Fournisseurs</p><strong>{suppliers.length}</strong></div></article></div>
         {(error || notice) && <div className={`message ${error ? 'error' : ''}`}>{error || notice}<button onClick={() => { setError(''); setNotice('') }}>×</button></div>}
@@ -102,7 +118,7 @@ function App({ user, shop, shops, onSwitchShop, onLogout }: {
         </section></>}
       </div>
     </section>
-    {showForm && <div className="overlay"><form className="dialog" onSubmit={saveProduct}><div className="dialog-head"><div><h2>{editing ? 'Modifier le produit' : 'Nouveau produit'}</h2><p>Les champs marqués d’un astérisque sont obligatoires.</p></div><button type="button" className="close" onClick={() => setShowForm(false)}>×</button></div><div className="form-grid"><label>Nom *<input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}/></label><label>Référence *<input required value={form.reference} onChange={e => setForm({ ...form, reference: e.target.value })}/></label><label>Fournisseur *<select required value={form.supplier} onChange={e => setForm({ ...form, supplier: e.target.value })}><option value="">Choisir un fournisseur</option>{suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label>Prix d’achat (FC) *<input required min="0" step="0.01" type="number" value={form.purchase_price} onChange={e => setForm({ ...form, purchase_price: e.target.value })}/></label><label>Prix de vente (FC) *<input required min="0" step="0.01" type="number" value={form.selling_price} onChange={e => setForm({ ...form, selling_price: e.target.value })}/></label>{!editing && <label>Stock initial<input min="0" type="number" value={form.initial_quantity} onChange={e => setForm({ ...form, initial_quantity: e.target.value })}/></label>}<label>Seuil d’alerte<input min="0" type="number" value={form.low_stock_threshold} onChange={e => setForm({ ...form, low_stock_threshold: e.target.value })}/></label></div>{error && <p className="form-error">{error}</p>}<div className="dialog-actions"><button type="button" className="secondary" onClick={() => setShowForm(false)}>Annuler</button><button className="primary" disabled={busy}>{busy ? 'Enregistrement…' : 'Enregistrer'}</button></div></form></div>}
+    {showForm && <div className="overlay"><form className="dialog" onSubmit={saveProduct}><div className="dialog-head"><div><h2>{editing ? 'Modifier le produit' : 'Nouveau produit'}</h2><p>Les champs marqués d’un astérisque sont obligatoires.</p></div><button type="button" className="close" onClick={() => setShowForm(false)}>×</button></div><div className="form-grid"><label>Nom *<input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}/></label><label>Référence *<input required value={form.reference} onChange={e => setForm({ ...form, reference: e.target.value })}/></label><label>Fournisseur *<span className="supplier-pick"><select required value={form.supplier} onChange={e => setForm({ ...form, supplier: e.target.value })}><option value="">{suppliers.length ? 'Choisir un fournisseur' : 'Aucun fournisseur : ajoutez-en un'}</option>{suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select><button type="button" className="secondary" onClick={() => setQuickSupplier('')}>＋ Nouveau</button></span>{quickSupplier !== null && <span className="quick-supplier"><input autoFocus placeholder="Nom du nouveau fournisseur" value={quickSupplier} onChange={e => setQuickSupplier(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void addQuickSupplier() } }} /><button type="button" className="primary" onClick={() => void addQuickSupplier()}>Ajouter</button><button type="button" className="secondary" onClick={() => setQuickSupplier(null)}>Annuler</button></span>}</label><label>Prix d’achat (FC) *<input required min="0" step="0.01" type="number" value={form.purchase_price} onChange={e => setForm({ ...form, purchase_price: e.target.value })}/></label><label>Prix de vente (FC) *<input required min="0" step="0.01" type="number" value={form.selling_price} onChange={e => setForm({ ...form, selling_price: e.target.value })}/></label>{!editing && <label>Stock initial<input min="0" type="number" value={form.initial_quantity} onChange={e => setForm({ ...form, initial_quantity: e.target.value })}/></label>}<label>Seuil d’alerte<input min="0" type="number" value={form.low_stock_threshold} onChange={e => setForm({ ...form, low_stock_threshold: e.target.value })}/></label></div>{error && <p className="form-error">{error}</p>}<div className="dialog-actions"><button type="button" className="secondary" onClick={() => setShowForm(false)}>Annuler</button><button className="primary" disabled={busy}>{busy ? 'Enregistrement…' : 'Enregistrer'}</button></div></form></div>}
     {movement && <div className="overlay"><form className="dialog narrow" onSubmit={submitMovement}><div className="dialog-head"><div><h2>{movement.kind === 'sale' ? 'Enregistrer une vente' : 'Ajouter au stock'}</h2><p>{movement.product.name} · disponible : {movement.product.quantity}</p></div><button type="button" className="close" onClick={() => setMovement(null)}>×</button></div><label>Quantité *<input required min="1" max={movement.kind === 'sale' ? movement.product.quantity : undefined} type="number" value={moveQty} onChange={e => setMoveQty(e.target.value)}/></label>{movement.kind === 'sale' && <p className="sale-summary">{saleQty} × {money(movement.product.selling_price)} = <b>{money(String(saleQty * Number(movement.product.selling_price)))}</b></p>}{error && <p className="form-error">{error}</p>}<div className="dialog-actions"><button type="button" className="secondary" onClick={() => setMovement(null)}>Annuler</button><button className="primary" disabled={busy}>{busy ? 'Traitement…' : 'Confirmer'}</button></div></form></div>}
   </main>
 }

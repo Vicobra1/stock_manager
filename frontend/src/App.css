@@ -49,3 +49,9 @@
 .login-switch{margin:16px 0 0;text-align:center;color:#9798a3;font-size:13px}
 .link-button{background:none;border:0;padding:0;color:#b39bff;font:inherit;font-weight:600;cursor:pointer}.link-button:hover{text-decoration:underline}
 @media(max-width:600px){.login-card .form-row{grid-template-columns:1fr;gap:0}}
+
+/* Fournisseurs */
+.panel-head:has(.panel-tools){flex-wrap:wrap;gap:12px}.panel-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto}
+.supplier-pick{display:flex;gap:6px}.supplier-pick select{flex:1;min-width:0}.supplier-pick .secondary{white-space:nowrap;padding:0 10px;height:38px}
+.quick-supplier{display:flex;gap:6px;margin-top:6px}.quick-supplier input{flex:1;min-width:0}.quick-supplier button{height:38px;padding:0 10px;white-space:nowrap}
+@media(max-width:600px){.panel-tools{width:100%}.panel-tools .search{flex:1}}
