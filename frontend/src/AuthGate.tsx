@@ -5,7 +5,7 @@ import NoRole from './NoRole'
 import ShopChooser from './ShopChooser'
 import {
   clearShopSession, clearToken, getShopId, getShopToken, getToken, request, setForbiddenHandler,
-  setShopRequiredHandler, setShopSession, setToken, setUnauthorizedHandler, type ShopSummary, type User,
+  setNotFoundHandler, setShopRequiredHandler, setShopSession, setToken, setUnauthorizedHandler, type ShopSummary, type User,
 } from './api'
 
 /** Connexion en deux temps (décision D2) : la connexion au compte, puis le choix de la boutique de cet onglet. */
@@ -23,6 +23,27 @@ export default function AuthGate() {
     setShopSession(data.token, data.shop.id)
     setNotice('')
     setShop(data.shop)
+  }
+
+  /** Changer de boutique sans se déconnecter (sélecteur de l'en-tête) : l'application repart de zéro dans la nouvelle. */
+  async function switchShop(target: ShopSummary) {
+    try { await chooseShop(target) } catch (err) {
+      setShop(null)  // retour au choix de la boutique, avec la raison
+      setNotice(err instanceof Error ? err.message : 'Impossible d’ouvrir cette boutique.')
+    }
+  }
+
+  /** Après un « introuvable » : si la boutique de l'onglet n'est plus dans ma liste, l'accès m'a été retiré. */
+  function checkStillMember() {
+    request('/auth/shops/').then((list: ShopSummary[]) => {
+      setShops(list)
+      setShop(current => {
+        if (!current || list.some(s => s.id === current.id)) return current
+        clearShopSession()
+        setNotice(`Vous n’avez plus accès à la boutique « ${current.name} ».`)
+        return null
+      })
+    }).catch(() => { /* 401 déjà géré, sinon on garde l'état */ })
   }
 
   /** Charge le compte et ses boutiques ; reprend la boutique de cet onglet, ou la choisit seule s'il n'y en a qu'une. */
@@ -54,7 +75,9 @@ export default function AuthGate() {
         .catch(() => setNotice(current => current || 'Impossible de vérifier votre session. Vérifiez que Django est démarré.'))
         .finally(() => setChecking(false))
     }
-    return () => { setUnauthorizedHandler(null); setForbiddenHandler(null); setShopRequiredHandler(null) }
+    // Un membre retiré de la boutique reçoit « introuvable » partout : on le détecte et on le ramène au choix.
+    setNotFoundHandler(checkStillMember)
+    return () => { setUnauthorizedHandler(null); setForbiddenHandler(null); setShopRequiredHandler(null); setNotFoundHandler(null) }
   }, [])
 
   async function onLogin(token: string) {
@@ -80,5 +103,7 @@ export default function AuthGate() {
   if (shops.length === 0) return <NoRole user={user} onLogout={() => void logout()} />
   if (!shop) return <ShopChooser user={user} shops={shops} notice={notice} onChoose={chooseShop} onLogout={() => void logout()} />
   // L'application reçoit le rôle de la boutique en cours.
-  return <App user={{ ...user, role: shop.role }} onLogout={() => void logout()} />
+  // La clé fait repartir l'application de zéro à chaque changement de boutique (pages, données, formulaires).
+  return <App key={shop.id} user={{ ...user, role: shop.role }} shop={shop} shops={shops}
+    onSwitchShop={s => void switchShop(s)} onLogout={() => void logout()} />
 }

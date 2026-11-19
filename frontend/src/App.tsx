@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import './App.css'
 import Dashboard from './Dashboard'
 import Movements from './Movements'
-import { ROLE_LABELS, request, type User } from './api'
+import { ROLE_LABELS, request, type ShopSummary, type User } from './api'
 
 type Supplier = { id: number; name: string }
 type Product = { id: number; name: string; reference: string; supplier: number; supplier_name: string; purchase_price: string; selling_price: string; quantity: number; low_stock_threshold: number; is_low_stock: boolean; is_active: boolean }
@@ -14,7 +14,9 @@ const PAGES: Record<Page, { icon: string; label: string; title: string; subtitle
   movements: { icon: '⇅', label: 'Mouvements', title: 'Historique des mouvements', subtitle: 'Toutes les entrées et ventes, filtrables par type, produit, fournisseur et date.' },
 }
 
-function App({ user, onLogout }: { user: User; onLogout: () => void }) {
+function App({ user, shop, shops, onSwitchShop, onLogout }: {
+  user: User; shop: ShopSummary; shops: ShopSummary[]; onSwitchShop: (shop: ShopSummary) => void; onLogout: () => void
+}) {
   const [page, setPage] = useState<Page>('products')
   const [products, setProducts] = useState<Product[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -86,7 +88,9 @@ function App({ user, onLogout }: { user: User; onLogout: () => void }) {
 
   return <main className="app-shell">
     <aside className="sidebar"><div className="brand"><span className="brand-mark">S</span><span>Stock<span className="brand-light">Boutique</span></span></div><p className="nav-label">GESTION</p>{visiblePages.map(key => <button key={key} className={`nav-item ${current === key ? 'active' : ''}`} onClick={() => setPage(key)}><span>{PAGES[key].icon}</span> {PAGES[key].label}</button>)}<div className="side-note"><span className="status-dot"/> API Django</div></aside>
-    <section className="main-area"><header className="topbar"><span className="crumb">Gestion <span>/</span> {PAGES[current].label}</span><div className="user-box">{user.role && <span className={`role-badge ${user.role}`}>{ROLE_LABELS[user.role]}</span>}<span className="user-name">{displayName}</span><span className="avatar">{displayName.charAt(0).toUpperCase()}</span><button className="secondary logout" onClick={onLogout}>Se déconnecter</button></div></header>
+    <section className="main-area"><header className="topbar"><span className="crumb">Gestion <span>/</span> {PAGES[current].label}</span><div className="user-box">{shops.length > 1
+          ? <label className="shop-switcher" title="Changer de boutique"><span className="visually-hidden">Boutique</span><select value={shop.id} onChange={e => { const next = shops.find(s => s.id === Number(e.target.value)); if (next) onSwitchShop(next) }}>{shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+          : <span className="shop-name" title="Boutique en cours">{shop.name}</span>}{user.role && <span className={`role-badge ${user.role}`}>{ROLE_LABELS[user.role]}</span>}<span className="user-name">{displayName}</span><span className="avatar">{displayName.charAt(0).toUpperCase()}</span><button className="secondary logout" onClick={onLogout}>Se déconnecter</button></div></header>
       <div className="content"><div className="page-heading"><div><p className="eyebrow">INVENTAIRE</p><h1>{PAGES[current].title}</h1><p className="subtitle">{PAGES[current].subtitle}</p></div>{current === 'products' && isManager && <button className="primary" onClick={openNew}>＋ <span>Nouveau produit</span></button>}</div>
         {current === 'dashboard' && <Dashboard onShowMovements={() => setPage('movements')} />}
         {current === 'movements' && <Movements />}

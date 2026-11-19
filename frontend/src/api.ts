@@ -55,6 +55,10 @@ let onForbidden: (() => void) | null = null
 /** Enregistre ce qu'il faut faire quand l'API refuse une action faute de droits (rôle retiré en cours de session). */
 export function setForbiddenHandler(handler: (() => void) | null) { onForbidden = handler }
 
+let onNotFound: (() => void) | null = null
+/** Enregistre ce qu'il faut faire après un « introuvable » : peut-être l'accès à la boutique a-t-il été retiré. */
+export function setNotFoundHandler(handler: (() => void) | null) { onNotFound = handler }
+
 let onShopRequired: (() => void) | null = null
 /** Enregistre ce qu'il faut faire quand l'API demande de choisir une boutique (jeton de boutique absent ou expiré). */
 export function setShopRequiredHandler(handler: (() => void) | null) { onShopRequired = handler }
@@ -76,6 +80,7 @@ export async function request(path: string, init?: RequestInit) {
     clearShopSession()
     onShopRequired?.()
   } else if (response.status === 403 && data.code !== 'quota_exceeded') onForbidden?.()
+  if (response.status === 404) onNotFound?.()
   if (!response.ok) throw new Error(data.detail || Object.values(data).flat().join(' ') || 'Une erreur est survenue.')
   return data
 }

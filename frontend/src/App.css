@@ -35,3 +35,10 @@
 .shop-choice{width:100%;display:grid;grid-template-columns:1fr auto;grid-template-areas:"name go" "meta go";gap:4px 12px;align-items:center;text-align:left;padding:12px 14px;border:1px solid #343640;border-radius:8px;background:#111217;color:#eceaf3;cursor:pointer}
 .shop-choice:hover:not(:disabled){border-color:#7964bd;background:#17161f}.shop-choice:disabled{opacity:.6;cursor:wait}
 .shop-choice-name{grid-area:name;font-weight:700;font-size:14px}.shop-choice-meta{grid-area:meta;display:flex;align-items:center;gap:8px;color:#9798a3;font-size:12px}.shop-choice-go{grid-area:go;color:#b39bff;font-weight:700}
+
+/* Boutique en cours dans l'en-tête */
+.shop-switcher select{height:32px;max-width:200px;padding:0 28px 0 10px;border:1px solid #3a3c46;border-radius:6px;background:#111217;color:#eceaf3;font:inherit;font-size:13px;font-weight:600;color-scheme:dark;cursor:pointer;text-overflow:ellipsis}
+.shop-switcher select:hover,.shop-switcher select:focus{border-color:#9078e5;outline:0}
+.shop-name{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#eceaf3;font-size:13px;font-weight:700}
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media(max-width:600px){.shop-switcher select,.shop-name{max-width:96px;font-size:12px}.user-box{gap:6px;min-width:0}.user-box .avatar{display:none}}
