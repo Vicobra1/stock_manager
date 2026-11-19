@@ -82,13 +82,13 @@ class Shop(models.Model):
         FREE = "free", "Gratuit"
         PRO = "pro", "Pro"
 
-    name = models.CharField(max_length=150)
+    name = models.CharField("nom", max_length=150)
     # Nom normalisé (minuscules, accents compris) : c'est lui que la base garde unique (décision D3b).
     # SQLite ne sait mettre en minuscules que les lettres sans accent : « Première » et « PREMIÈRE » lui
     # paraîtraient différents. Python, lui, normalise correctement toutes les lettres.
     name_key = models.CharField(max_length=150, unique=True, editable=False)
-    plan = models.CharField(max_length=10, choices=Plan.choices, default=Plan.FREE)
-    created_at = models.DateTimeField(auto_now_add=True)
+    plan = models.CharField("plan", max_length=10, choices=Plan.choices, default=Plan.FREE)
+    created_at = models.DateTimeField("créée le", auto_now_add=True)
 
     class Meta:
         ordering = ["name"]
@@ -113,10 +113,11 @@ class Membership(models.Model):
         MANAGER = "manager", "Gérant"
         SELLER = "seller", "Vendeur"
 
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="memberships")
-    shop = models.ForeignKey(Shop, on_delete=models.CASCADE, related_name="memberships")
-    role = models.CharField(max_length=10, choices=Role.choices)
-    created_at = models.DateTimeField(auto_now_add=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="memberships",
+                             verbose_name="utilisateur")
+    shop = models.ForeignKey(Shop, on_delete=models.CASCADE, related_name="memberships", verbose_name="boutique")
+    role = models.CharField("rôle", max_length=10, choices=Role.choices)
+    created_at = models.DateTimeField("ajouté le", auto_now_add=True)
 
     class Meta:
         verbose_name = "membre"
