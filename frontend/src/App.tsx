@@ -3,7 +3,7 @@ import './App.css'
 import Dashboard from './Dashboard'
 import Movements from './Movements'
 import Suppliers from './Suppliers'
-import { ROLE_LABELS, request, type ShopSummary, type User } from './api'
+import { isQuotaError, PLAN_LABELS, ROLE_LABELS, request, type ShopInfo, type ShopSummary, type User } from './api'
 
 type Supplier = { id: number; name: string }
 type Product = { id: number; name: string; reference: string; supplier: number; supplier_name: string; purchase_price: string; selling_price: string; quantity: number; low_stock_threshold: number; is_low_stock: boolean; is_active: boolean }
@@ -33,11 +33,15 @@ function App({ user, shop, shops, onSwitchShop, onLogout }: {
   const [movement, setMovement] = useState<{ product: Product; kind: 'sale' | 'entry' } | null>(null)
   const [moveQty, setMoveQty] = useState('1')
   const [quickSupplier, setQuickSupplier] = useState<string | null>(null)
+  const [info, setInfo] = useState<ShopInfo | null>(null)
+  const [quota, setQuota] = useState('')
 
   async function refresh() {
     try {
       const [p, s] = await Promise.all([request(includeInactive ? '/products/' : '/products/?active=true'), request('/suppliers/')])
       setProducts(p.results ?? p); setSuppliers(s.results ?? s); setError('')
+      // Le plan et l'utilisation suivent chaque changement du catalogue (produits actifs).
+      request('/shop/').then(setInfo).catch(() => { /* l'affichage du plan est secondaire */ })
     } catch (e) { setError(e instanceof Error ? e.message : 'API indisponible. Vérifiez que Django est démarré.') }
   }
   useEffect(() => { void refresh() }, [includeInactive])
@@ -52,7 +56,11 @@ function App({ user, shop, shops, onSwitchShop, onLogout }: {
     e.preventDefault(); setBusy(true); setError('')
     const body = { ...form, supplier: Number(form.supplier), purchase_price: Number(form.purchase_price), selling_price: Number(form.selling_price), low_stock_threshold: Number(form.low_stock_threshold), ...(editing ? {} : { initial_quantity: Number(form.initial_quantity) }) }
     try { await request(`/products/${editing ? `${editing.id}/` : ''}`, { method: editing ? 'PATCH' : 'POST', body: JSON.stringify(body) }); setShowForm(false); setNotice(editing ? 'Produit modifié.' : 'Produit ajouté.'); await refresh() }
-    catch (e) { setError(e instanceof Error ? e.message : 'Enregistrement impossible.') } finally { setBusy(false) }
+    catch (e) {
+      // Limite du plan atteinte : le formulaire n'y peut rien, on le ferme et on explique dans le bandeau.
+      if (isQuotaError(e)) { setShowForm(false); setNotice(''); setQuota(e.message) }
+      else setError(e instanceof Error ? e.message : 'Enregistrement impossible.')
+    } finally { setBusy(false) }
   }
   async function submitMovement(e: FormEvent) {
     e.preventDefault(); if (!movement) return; setBusy(true)
@@ -77,7 +85,10 @@ function App({ user, shop, shops, onSwitchShop, onLogout }: {
       await request(`/products/${p.id}/`, { method: 'PATCH', body: JSON.stringify({ is_active: true }) })
       setNotice(`${p.name} a été réactivé.`)
       await refresh()
-    } catch (e) { setError(e instanceof Error ? e.message : 'Réactivation impossible.') }
+    } catch (e) {
+      if (isQuotaError(e)) { setNotice(''); setQuota(e.message) }
+      else setError(e instanceof Error ? e.message : 'Réactivation impossible.')
+    }
   }
   const filtered = products.filter(p => `${p.name} ${p.reference} ${p.supplier_name}`.toLowerCase().includes(query.toLowerCase()))
   const lowCount = products.filter(p => p.is_low_stock).length
@@ -88,6 +99,10 @@ function App({ user, shop, shops, onSwitchShop, onLogout }: {
   const visiblePages = (Object.keys(PAGES) as Page[]).filter(key => key !== 'dashboard' || isManager)
   const current: Page = visiblePages.includes(page) ? page : 'products'
   const saleQty = Number(moveQty) || 0
+  // Places restantes pour des produits actifs ; le bandeau prévient à partir de 90 % de la limite.
+  const productsLeft = info ? info.limits.products - info.usage.products : null
+  const nearLimit = info !== null && productsLeft !== null && info.usage.products >= info.limits.products * 0.9
+  const usageClass = (used: number, limit: number) => used >= limit ? 'full' : used >= limit * 0.9 ? 'near' : ''
 
   // Ajout rapide d'un fournisseur depuis le formulaire produit (décision F-2) : créé puis sélectionné aussitôt.
   async function addQuickSupplier() {
@@ -102,7 +117,7 @@ function App({ user, shop, shops, onSwitchShop, onLogout }: {
   }
 
   return <main className="app-shell">
-    <aside className="sidebar"><div className="brand"><span className="brand-mark">S</span><span>Stock<span className="brand-light">Boutique</span></span></div><p className="nav-label">GESTION</p>{visiblePages.map(key => <button key={key} className={`nav-item ${current === key ? 'active' : ''}`} onClick={() => setPage(key)}><span>{PAGES[key].icon}</span> {PAGES[key].label}</button>)}<div className="side-note"><span className="status-dot"/> API Django</div></aside>
+    <aside className="sidebar"><div className="brand"><span className="brand-mark">S</span><span>Stock<span className="brand-light">Boutique</span></span></div><p className="nav-label">GESTION</p>{visiblePages.map(key => <button key={key} className={`nav-item ${current === key ? 'active' : ''}`} onClick={() => setPage(key)}><span>{PAGES[key].icon}</span> {PAGES[key].label}</button>)}{info && <div className="plan-card"><p className="plan-name">Plan {PLAN_LABELS[info.plan]}</p>{([['products', 'Produits actifs'], ['members', 'Membres']] as const).map(([key, label]) => <div key={key} className={`plan-usage ${usageClass(info.usage[key], info.limits[key])}`}><div><span>{label}</span><b>{info.usage[key]} / {info.limits[key]}</b></div><span className="plan-bar"><i style={{ width: `${Math.min(100, info.usage[key] / info.limits[key] * 100)}%` }}/></span></div>)}</div>}<div className="side-note"><span className="status-dot"/> API Django</div></aside>
     <section className="main-area"><header className="topbar"><span className="crumb">Gestion <span>/</span> {PAGES[current].label}</span><div className="user-box">{shops.length > 1
           ? <label className="shop-switcher" title="Changer de boutique"><span className="visually-hidden">Boutique</span><select value={shop.id} onChange={e => { const next = shops.find(s => s.id === Number(e.target.value)); if (next) onSwitchShop(next) }}>{shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
           : <span className="shop-name" title="Boutique en cours">{shop.name}</span>}{user.role && <span className={`role-badge ${user.role}`}>{ROLE_LABELS[user.role]}</span>}<span className="user-name">{displayName}</span><span className="avatar">{displayName.charAt(0).toUpperCase()}</span><button className="secondary logout" onClick={onLogout}>Se déconnecter</button></div></header>
@@ -112,6 +127,10 @@ function App({ user, shop, shops, onSwitchShop, onLogout }: {
         {current === 'suppliers' && <Suppliers canEdit={isManager} onChanged={() => void refresh()} />}
         {current === 'products' && <>
         <div className="stats"><article className="stat-card"><span className="stat-icon purple">▦</span><div><p>Produits actifs</p><strong>{products.length}</strong></div></article><article className="stat-card"><span className="stat-icon amber">↘</span><div><p>Stock faible</p><strong>{lowCount}</strong></div></article><article className="stat-card"><span className="stat-icon green">▤</span><div><p>Fournisseurs</p><strong>{suppliers.length}</strong></div></article></div>
+        {quota && <div className="message warning" role="alert">{quota}<button onClick={() => setQuota('')}>×</button></div>}
+        {!quota && isManager && nearLimit && info && <div className="message warning">{productsLeft! <= 0
+          ? `Limite atteinte : ${info.usage.products} / ${info.limits.products} produits actifs au plan ${PLAN_LABELS[info.plan]}. Désactivez un produit pour en ajouter un autre.`
+          : `Plus que ${productsLeft} place${productsLeft! > 1 ? 's' : ''} pour des produits actifs au plan ${PLAN_LABELS[info.plan]} (${info.usage.products} / ${info.limits.products}).`}</div>}
         {(error || notice) && <div className={`message ${error ? 'error' : ''}`}>{error || notice}<button onClick={() => { setError(''); setNotice('') }}>×</button></div>}
         <section className="panel"><div className="panel-head"><div><h2>Catalogue produits</h2><p>{filtered.length} produit{filtered.length !== 1 ? 's' : ''}</p>{isManager && <label className="inactive-filter"><input type="checkbox" checked={includeInactive} onChange={e => setIncludeInactive(e.target.checked)} /> Inclure les produits désactivés</label>}</div><label className="search"><span>⌕</span><input placeholder="Rechercher un produit…" value={query} onChange={e => setQuery(e.target.value)} /></label></div>
           <div className="table-wrap"><table><thead><tr><th>PRODUIT</th><th>FOURNISSEUR</th>{isManager && <th>PRIX D’ACHAT</th>}<th>PRIX DE VENTE</th><th>QUANTITÉ</th><th>ÉTAT</th><th></th></tr></thead><tbody>{filtered.map(p => <tr key={p.id}><td><div className="product-name">{p.name}</div><div className="ref">{p.reference}</div></td><td>{p.supplier_name}</td>{isManager && <td>{money(p.purchase_price)}</td>}<td className="price-sale">{money(p.selling_price)}</td><td><b>{p.quantity}</b><span className="unit"> unités</span></td><td><span className={`badge ${!p.is_active ? 'inactive' : p.is_low_stock ? 'warning' : 'success'}`}><i/> {!p.is_active ? 'Désactivé' : p.is_low_stock ? 'Stock faible' : 'En stock'}</span></td><td><div className="actions">{p.is_active && <button title="Enregistrer une vente" onClick={() => { setMovement({ product: p, kind: 'sale' }); setMoveQty('1') }}>−</button>}{isManager && <>{p.is_active ? <><button title="Ajouter du stock" onClick={() => { setMovement({ product: p, kind: 'entry' }); setMoveQty('1') }}>＋</button><button title="Modifier" onClick={() => openEdit(p)}>✎</button><button title="Désactiver le produit" aria-label={`Désactiver ${p.name}`} onClick={() => void deactivate(p)}>⏻</button></> : <button title="Réactiver le produit" aria-label={`Réactiver ${p.name}`} onClick={() => void reactivate(p)}>↻</button>}<button title="Supprimer" onClick={() => void remove(p)}>×</button></>}</div></td></tr>)}{!filtered.length && <tr><td colSpan={isManager ? 7 : 6} className="empty">{error ? 'Connexion à l’API en attente…' : 'Aucun produit trouvé.'}</td></tr>}</tbody></table></div>

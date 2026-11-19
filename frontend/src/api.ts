@@ -12,6 +12,8 @@ export type User = { id: number; username: string; first_name: string; last_name
 export type Plan = 'free' | 'pro'
 export const PLAN_LABELS: Record<Plan, string> = { free: 'Gratuit', pro: 'Pro' }
 export type ShopSummary = { id: number; name: string; plan: Plan; role: Role }
+/** Plan de la boutique en cours, ses limites et ce qui est déjà utilisé (GET /api/shop/). */
+export type ShopInfo = ShopSummary & { plan_label: string; limits: { products: number; members: number }; usage: { products: number; members: number } }
 
 // Copies en mémoire, pour que les appels fonctionnent même si le navigateur bloque le stockage.
 const memory: Record<string, string | null> = {}
@@ -74,6 +76,11 @@ export class ApiError extends Error {
     this.status = status
     this.data = data
   }
+}
+
+/** Refus dû à une limite du plan (403 avec le code « quota_exceeded ») : son message vient du serveur. */
+export function isQuotaError(e: unknown): e is ApiError {
+  return e instanceof ApiError && (e.data as { code?: string } | null)?.code === 'quota_exceeded'
 }
 
 export async function request(path: string, init?: RequestInit) {
