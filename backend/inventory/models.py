@@ -7,7 +7,8 @@ from django.core.validators import MinValueValidator
 
 
 class Supplier(models.Model):
-    name = models.CharField(max_length=150, unique=True)
+    shop = models.ForeignKey("Shop", on_delete=models.PROTECT, related_name="suppliers")
+    name = models.CharField(max_length=150)
     phone = models.CharField(max_length=40, blank=True)
     email = models.EmailField(blank=True)
     address = models.CharField(max_length=255, blank=True)
@@ -16,14 +17,19 @@ class Supplier(models.Model):
 
     class Meta:
         ordering = ["name"]
+        constraints = [
+            # Nom unique au sein d'une boutique seulement (deux boutiques peuvent avoir le même fournisseur).
+            models.UniqueConstraint(fields=["shop", "name"], name="unique_supplier_name_per_shop"),
+        ]
 
     def __str__(self):
         return self.name
 
 
 class Product(models.Model):
+    shop = models.ForeignKey("Shop", on_delete=models.PROTECT, related_name="products")
     name = models.CharField(max_length=200, db_index=True)
-    reference = models.CharField(max_length=80, unique=True)
+    reference = models.CharField(max_length=80)
     supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT, related_name="products")
     purchase_price = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
     selling_price = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
@@ -36,6 +42,10 @@ class Product(models.Model):
 
     class Meta:
         ordering = ["name"]
+        constraints = [
+            # Référence unique au sein d'une boutique seulement.
+            models.UniqueConstraint(fields=["shop", "reference"], name="unique_product_reference_per_shop"),
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.reference})"

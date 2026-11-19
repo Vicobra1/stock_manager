@@ -1,9 +1,10 @@
 import re
 
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Group
 from django.core.cache import cache
 from django.test import TestCase
+
+from .models import Membership, Shop
 
 User = get_user_model()
 PASSWORD = "mot-de-passe-de-test-123"
@@ -13,7 +14,9 @@ class AuthTests(TestCase):
     def setUp(self):
         cache.clear()  # le compteur de tentatives de connexion ne doit pas passer d'un test à l'autre
         self.user = User.objects.create_user("gerant", password=PASSWORD, first_name="Awa", is_staff=True)
-        self.user.groups.add(Group.objects.get(name="Gérant"))
+        # Multi-boutiques : le rôle est porté par l'appartenance à une boutique, plus par un groupe.
+        self.shop = Shop.objects.create(name="Boutique de test")
+        Membership.objects.create(user=self.user, shop=self.shop, role=Membership.Role.MANAGER)
 
     def login(self, **overrides):
         return self.client.post("/api/auth/login/", {"username": "gerant", "password": PASSWORD, **overrides},
@@ -22,13 +25,20 @@ class AuthTests(TestCase):
     def auth(self, token):
         return {"HTTP_AUTHORIZATION": f"Token {token}"}
 
+    def shop_token(self):
+        """Connexion en deux temps : jeton compte, puis jeton de la boutique."""
+        account = self.login().json()["token"]
+        return self.client.post("/api/auth/shop-token/", {"shop": self.shop.id}, content_type="application/json",
+                                **self.auth(account)).json()["token"]
+
     def test_login_returns_token_and_user_without_secrets(self):
         response = self.login()
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertTrue(body["token"])
         self.assertEqual(body["user"], {"id": self.user.id, "username": "gerant", "first_name": "Awa",
-                                        "last_name": "", "is_staff": True, "role": "manager"})
+                                        "last_name": "", "is_staff": True, "role": None})
+        # Le rôle dépend de la boutique : il est vide tant qu'aucune boutique n'est choisie.
 
     def test_login_twice_reuses_the_same_token(self):
         self.assertEqual(self.login().json()["token"], self.login().json()["token"])
@@ -71,9 +81,16 @@ class AuthTests(TestCase):
             self.assertEqual(self.client.get(path).status_code, 401, path)
 
     def test_business_routes_accept_a_valid_token(self):
-        headers = self.auth(self.login().json()["token"])
+        headers = self.auth(self.shop_token())
         for path in ("/api/products/", "/api/suppliers/", "/api/movements/", "/api/dashboard/"):
             self.assertEqual(self.client.get(path, **headers).status_code, 200, path)
+
+    def test_business_routes_refuse_the_account_token(self):
+        headers = self.auth(self.login().json()["token"])
+        for path in ("/api/products/", "/api/suppliers/", "/api/movements/", "/api/dashboard/"):
+            response = self.client.get(path, **headers)
+            self.assertEqual((response.status_code, response.json()["detail"]),
+                             (403, "Choisissez d'abord une boutique."), path)
 
     def test_writes_require_a_token(self):
         response = self.client.post("/api/suppliers/", {"name": "Intrus"}, content_type="application/json")
@@ -108,5 +125,4 @@ class AuthTests(TestCase):
 
     def test_invalid_token_is_rejected(self):
         self.assertEqual(self.client.get("/api/products/", **self.auth("jeton-invalide")).status_code, 401)
-        token = self.login().json()["token"]
-        self.assertEqual(self.client.get("/api/products/", **self.auth(token)).status_code, 200)
+        self.assertEqual(self.client.get("/api/products/", **self.auth(self.shop_token())).status_code, 200)

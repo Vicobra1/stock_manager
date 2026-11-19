@@ -2,16 +2,14 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Group
 from django.test import TestCase
 from django.utils import timezone
-from rest_framework.authtoken.models import Token
 
-from .models import Product, StockMovement, Supplier
+from .models import Membership, Product, Shop, ShopToken, StockMovement, Supplier
 
 
 def make_product(supplier, reference, quantity=10, purchase="100", selling="150", threshold=5, **extra):
-    return Product.objects.create(name=f"Produit {reference}", reference=reference, supplier=supplier,
+    return Product.objects.create(shop=supplier.shop, name=f"Produit {reference}", reference=reference, supplier=supplier,
                                   purchase_price=Decimal(purchase), selling_price=Decimal(selling),
                                   quantity=quantity, low_stock_threshold=threshold, **extra)
 
@@ -28,16 +26,18 @@ class AuthenticatedTestCase(TestCase):
     """Toute l'API exige un jeton : chaque requête du client de test l'envoie (en tant que gérant)."""
 
     def setUp(self):
+        # Multi-boutiques : chaque requête se fait avec un jeton de boutique, en tant que gérant de cette boutique.
         user = get_user_model().objects.create_user("testeur", password="mot-de-passe-de-test-123")
-        user.groups.add(Group.objects.get(name="Gérant"))
-        self.client.defaults["HTTP_AUTHORIZATION"] = f"Token {Token.objects.create(user=user).key}"
+        self.shop = Shop.objects.create(name="Boutique de test")
+        Membership.objects.create(user=user, shop=self.shop, role=Membership.Role.MANAGER)
+        self.client.defaults["HTTP_AUTHORIZATION"] = f"Token {ShopToken.objects.create(user=user, shop=self.shop).key}"
 
 
 class MovementFilterTests(AuthenticatedTestCase):
     def setUp(self):
         super().setUp()
-        self.s1 = Supplier.objects.create(name="Fournisseur A")
-        self.s2 = Supplier.objects.create(name="Fournisseur B")
+        self.s1 = Supplier.objects.create(shop=self.shop, name="Fournisseur A")
+        self.s2 = Supplier.objects.create(shop=self.shop, name="Fournisseur B")
         self.p1 = make_product(self.s1, "A-001")
         self.p2 = make_product(self.s2, "B-001")
         self.old_entry = make_movement(self.p1, "entry", 5, days_ago=10, note="Réassort")
@@ -87,7 +87,7 @@ class MovementFilterTests(AuthenticatedTestCase):
 class DashboardTests(AuthenticatedTestCase):
     def setUp(self):
         super().setUp()
-        supplier = Supplier.objects.create(name="Fournisseur A")
+        supplier = Supplier.objects.create(shop=self.shop, name="Fournisseur A")
         self.ok = make_product(supplier, "OK", quantity=10, purchase="100", selling="150")
         self.low = make_product(supplier, "LOW", quantity=2, purchase="50", selling="80")
         self.empty = make_product(supplier, "ZERO", quantity=0, purchase="10", selling="20")

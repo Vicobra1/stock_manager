@@ -23,7 +23,8 @@ class UserSerializer(serializers.Serializer):
     role = serializers.SerializerMethodField()
 
     def get_role(self, user):
-        return get_role(user)
+        # Rôle DANS la boutique du jeton ; aucun avec le jeton « compte » (il faut d'abord choisir une boutique).
+        return get_role(self.context.get("request"))
 
 
 class LoginSerializer(serializers.Serializer):
@@ -76,7 +77,7 @@ class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return Response(UserSerializer(request.user).data)
+        return Response(UserSerializer(request.user, context={"request": request}).data)
 
 
 def shop_summary(membership):
