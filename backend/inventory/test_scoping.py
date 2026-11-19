@@ -12,7 +12,7 @@ User = get_user_model()
 
 # Vues volontairement hors boutique : connexion, choix de la boutique, et la page d'accueil de l'API (liste d'adresses).
 UNSCOPED_VIEWS = {auth_views.LoginView, auth_views.LogoutView, auth_views.MeView, auth_views.MyShopsView,
-                  auth_views.ShopTokenView, APIRootView}
+                  auth_views.ShopTokenView, auth_views.SignupView, APIRootView}
 
 
 def api_view_classes(patterns=None, prefix=""):

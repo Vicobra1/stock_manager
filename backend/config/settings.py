@@ -146,7 +146,8 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': ['inventory.authentication.ExpiringTokenAuthentication'],
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
     # Nombre maximal de tentatives de connexion par adresse IP.
-    'DEFAULT_THROTTLE_RATES': {'login': '5/min'},
+    # Inscription (décision D6) : 5 par heure et par adresse IP.
+    'DEFAULT_THROTTLE_RATES': {'login': '5/min', 'signup': '5/hour'},
     # Aucun serveur intermédiaire de confiance : l'adresse est celle de la connexion (REMOTE_ADDR),
     # jamais l'en-tête X-Forwarded-For, que le client peut falsifier. À passer à 1 derrière un proxy.
     'NUM_PROXIES': 0,

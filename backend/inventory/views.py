@@ -11,9 +11,9 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.response import Response
-from .models import Product, Supplier, StockMovement
-from .quotas import ensure_product_slot, lock_shop
-from .roles import ROLE_MANAGER, IsManager, IsManagerOrSeller, get_role
+from .models import Membership, Product, Supplier, StockMovement
+from .quotas import PLAN_LABELS, ensure_product_slot, limits, lock_shop
+from .roles import ROLE_MANAGER, IsManager, IsManagerOrSeller, get_membership, get_role
 from .scoping import ShopScopedAPIView, ShopScopedViewSet
 from .serializers import ProductSerializer, SupplierSerializer, StockMovementSerializer
 
@@ -245,4 +245,24 @@ class DashboardView(ShopScopedAPIView):
                               "reference": r["product__reference"], "units": r["units"], "revenue": r["revenue"]}
                              for r in top_products],
             "recent_movements": StockMovementSerializer(recent, many=True).data,
+        })
+
+
+class ShopInfoView(ShopScopedAPIView):
+    """GET -> la boutique en cours : plan, limites et utilisation (décision D6). Visible par tous ses membres,
+    pour qu'un vendeur comprenne aussi un refus dû à une limite. Le plan ne se change pas ici (facturation hors
+    périmètre)."""
+    permission_classes = [IsManagerOrSeller]
+
+    def get(self, request):
+        shop = self.shop
+        return Response({
+            "id": shop.id,
+            "name": shop.name,
+            "plan": shop.plan,
+            "plan_label": PLAN_LABELS[shop.plan],
+            "role": get_membership(request).role,
+            "limits": limits(shop),
+            "usage": {"products": self.scope(Product.objects.filter(is_active=True)).count(),
+                      "members": self.scope(Membership.objects.all()).count()},
         })
