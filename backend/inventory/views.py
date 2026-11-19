@@ -12,6 +12,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.response import Response
 from .models import Product, Supplier, StockMovement
+from .quotas import ensure_product_slot, lock_shop
 from .roles import ROLE_MANAGER, IsManager, IsManagerOrSeller, get_role
 from .scoping import ShopScopedAPIView, ShopScopedViewSet
 from .serializers import ProductSerializer, SupplierSerializer, StockMovementSerializer
@@ -59,10 +60,23 @@ class ProductViewSet(ShopScopedViewSet, viewsets.ModelViewSet):
         except (TypeError, ValueError):
             raise ValidationError({"initial_quantity": "La quantité initiale doit être un entier positif ou nul."})
         with transaction.atomic():
+            if serializer.validated_data.get("is_active", True):
+                # Quota (D5) : « ticket » de la boutique, puis comptage ; un refus 402 annule tout (rien n'est créé).
+                lock_shop(self.shop)
+                ensure_product_slot(self.shop)
             product = serializer.save(quantity=quantity, shop=self.shop)
             if quantity:
                 StockMovement.objects.create(product=product, movement_type=StockMovement.MovementType.INITIAL,
                                              quantity=quantity, note="Stock initial")
+
+    def perform_update(self, serializer):
+        reactivating = serializer.validated_data.get("is_active") is True and not serializer.instance.is_active
+        with transaction.atomic():
+            if reactivating:
+                # Réactiver reprend une place : même contrôle que pour une création.
+                lock_shop(self.shop)
+                ensure_product_slot(self.shop)
+            serializer.save()
 
     def destroy(self, request, *args, **kwargs):
         product = self.get_object()
