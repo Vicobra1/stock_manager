@@ -29,3 +29,9 @@
 .sale-summary{margin:-4px 0 6px;color:#9798a3;font-size:12px}.sale-summary b{color:#ecebf1}
 @media(max-width:600px){.crumb{display:none}.topbar{justify-content:flex-end}}
 .no-role-user{color:#ecebf1;font-weight:600}.login-card .message{margin-bottom:18px}.no-role-logout{width:100%;height:40px}
+
+/* Choix de la boutique */
+.shop-list{list-style:none;margin:0 0 16px;padding:0;display:flex;flex-direction:column;gap:8px}
+.shop-choice{width:100%;display:grid;grid-template-columns:1fr auto;grid-template-areas:"name go" "meta go";gap:4px 12px;align-items:center;text-align:left;padding:12px 14px;border:1px solid #343640;border-radius:8px;background:#111217;color:#eceaf3;cursor:pointer}
+.shop-choice:hover:not(:disabled){border-color:#7964bd;background:#17161f}.shop-choice:disabled{opacity:.6;cursor:wait}
+.shop-choice-name{grid-area:name;font-weight:700;font-size:14px}.shop-choice-meta{grid-area:meta;display:flex;align-items:center;gap:8px;color:#9798a3;font-size:12px}.shop-choice-go{grid-area:go;color:#b39bff;font-weight:700}
