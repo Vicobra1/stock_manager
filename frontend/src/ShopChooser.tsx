@@ -1,16 +1,19 @@
 import { useState } from 'react'
+import NewShopDialog from './NewShopDialog'
 import { PLAN_LABELS, ROLE_LABELS, type ShopSummary, type User } from './api'
 
 /** Second temps de la connexion (décision D2) : choisir la boutique dans laquelle travailler dans cet onglet. */
-export default function ShopChooser({ user, shops, notice, onChoose, onLogout }: {
+export default function ShopChooser({ user, shops, notice, onChoose, onCreateShop, onLogout }: {
   user: User
   shops: ShopSummary[]
   notice: string
   onChoose: (shop: ShopSummary) => Promise<void>
+  onCreateShop?: (shop: ShopSummary) => Promise<void>
   onLogout: () => void
 }) {
   const [busy, setBusy] = useState<number | null>(null)
   const [error, setError] = useState('')
+  const [creating, setCreating] = useState(false)
 
   async function choose(shop: ShopSummary) {
     setBusy(shop.id); setError('')
@@ -34,7 +37,9 @@ export default function ShopChooser({ user, shops, notice, onChoose, onLogout }:
           <span className="shop-choice-go">{busy === shop.id ? 'Ouverture…' : '→'}</span>
         </button>
       </li>)}</ul>
+      {onCreateShop && <button className="link-button new-shop-link" onClick={() => setCreating(true)}>＋ Créer une autre boutique</button>}
       <button className="secondary no-role-logout" onClick={onLogout}>Se déconnecter</button>
     </section>
+    {creating && onCreateShop && <NewShopDialog onCreated={onCreateShop} onClose={() => setCreating(false)} />}
   </main>
 }

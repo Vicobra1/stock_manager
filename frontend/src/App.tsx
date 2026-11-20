@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import './App.css'
 import Dashboard from './Dashboard'
 import Movements from './Movements'
+import NewShopDialog from './NewShopDialog'
 import Suppliers from './Suppliers'
 import { isQuotaError, PLAN_LABELS, ROLE_LABELS, request, type ShopInfo, type ShopSummary, type User } from './api'
 
@@ -16,8 +17,9 @@ const PAGES: Record<Page, { icon: string; label: string; title: string; subtitle
   movements: { icon: '⇅', label: 'Mouvements', title: 'Historique des mouvements', subtitle: 'Toutes les entrées et ventes, filtrables par type, produit, fournisseur et date.' },
 }
 
-function App({ user, shop, shops, onSwitchShop, onLogout }: {
-  user: User; shop: ShopSummary; shops: ShopSummary[]; onSwitchShop: (shop: ShopSummary) => void; onLogout: () => void
+function App({ user, shop, shops, onSwitchShop, onCreateShop, onLogout }: {
+  user: User; shop: ShopSummary; shops: ShopSummary[]; onSwitchShop: (shop: ShopSummary) => void
+  onCreateShop?: (shop: ShopSummary) => Promise<void>; onLogout: () => void
 }) {
   const [page, setPage] = useState<Page>('products')
   const [products, setProducts] = useState<Product[]>([])
@@ -35,6 +37,7 @@ function App({ user, shop, shops, onSwitchShop, onLogout }: {
   const [quickSupplier, setQuickSupplier] = useState<string | null>(null)
   const [info, setInfo] = useState<ShopInfo | null>(null)
   const [quota, setQuota] = useState('')
+  const [creatingShop, setCreatingShop] = useState(false)
 
   async function refresh() {
     try {
@@ -120,7 +123,7 @@ function App({ user, shop, shops, onSwitchShop, onLogout }: {
     <aside className="sidebar"><div className="brand"><span className="brand-mark">S</span><span>Stock<span className="brand-light">Boutique</span></span></div><p className="nav-label">GESTION</p>{visiblePages.map(key => <button key={key} className={`nav-item ${current === key ? 'active' : ''}`} onClick={() => setPage(key)}><span>{PAGES[key].icon}</span> {PAGES[key].label}</button>)}{info && <div className="plan-card"><p className="plan-name">Plan {PLAN_LABELS[info.plan]}</p>{([['products', 'Produits actifs'], ['members', 'Membres']] as const).map(([key, label]) => <div key={key} className={`plan-usage ${usageClass(info.usage[key], info.limits[key])}`}><div><span>{label}</span><b>{info.usage[key]} / {info.limits[key]}</b></div><span className="plan-bar"><i style={{ width: `${Math.min(100, info.usage[key] / info.limits[key] * 100)}%` }}/></span></div>)}</div>}<div className="side-note"><span className="status-dot"/> API Django</div></aside>
     <section className="main-area"><header className="topbar"><span className="crumb">Gestion <span>/</span> {PAGES[current].label}</span><div className="user-box">{shops.length > 1
           ? <label className="shop-switcher" title="Changer de boutique"><span className="visually-hidden">Boutique</span><select value={shop.id} onChange={e => { const next = shops.find(s => s.id === Number(e.target.value)); if (next) onSwitchShop(next) }}>{shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
-          : <span className="shop-name" title="Boutique en cours">{shop.name}</span>}{user.role && <span className={`role-badge ${user.role}`}>{ROLE_LABELS[user.role]}</span>}<span className="user-name">{displayName}</span><span className="avatar">{displayName.charAt(0).toUpperCase()}</span><button className="secondary logout" onClick={onLogout}>Se déconnecter</button></div></header>
+          : <span className="shop-name" title="Boutique en cours">{shop.name}</span>}{onCreateShop && <button className="secondary new-shop" title="Créer une autre boutique" aria-label="Créer une autre boutique" onClick={() => setCreatingShop(true)}>＋</button>}{user.role && <span className={`role-badge ${user.role}`}>{ROLE_LABELS[user.role]}</span>}<span className="user-name">{displayName}</span><span className="avatar">{displayName.charAt(0).toUpperCase()}</span><button className="secondary logout" onClick={onLogout}>Se déconnecter</button></div></header>
       <div className="content"><div className="page-heading"><div><p className="eyebrow">INVENTAIRE</p><h1>{PAGES[current].title}</h1><p className="subtitle">{PAGES[current].subtitle}</p></div>{current === 'products' && isManager && <button className="primary" onClick={openNew}>＋ <span>Nouveau produit</span></button>}</div>
         {current === 'dashboard' && <Dashboard onShowMovements={() => setPage('movements')} />}
         {current === 'movements' && <Movements />}
@@ -139,6 +142,7 @@ function App({ user, shop, shops, onSwitchShop, onLogout }: {
     </section>
     {showForm && <div className="overlay"><form className="dialog" onSubmit={saveProduct}><div className="dialog-head"><div><h2>{editing ? 'Modifier le produit' : 'Nouveau produit'}</h2><p>Les champs marqués d’un astérisque sont obligatoires.</p></div><button type="button" className="close" onClick={() => setShowForm(false)}>×</button></div><div className="form-grid"><label>Nom *<input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}/></label><label>Référence *<input required value={form.reference} onChange={e => setForm({ ...form, reference: e.target.value })}/></label><label>Fournisseur *<span className="supplier-pick"><select required value={form.supplier} onChange={e => setForm({ ...form, supplier: e.target.value })}><option value="">{suppliers.length ? 'Choisir un fournisseur' : 'Aucun fournisseur : ajoutez-en un'}</option>{suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select><button type="button" className="secondary" onClick={() => setQuickSupplier('')}>＋ Nouveau</button></span>{quickSupplier !== null && <span className="quick-supplier"><input autoFocus placeholder="Nom du nouveau fournisseur" value={quickSupplier} onChange={e => setQuickSupplier(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void addQuickSupplier() } }} /><button type="button" className="primary" onClick={() => void addQuickSupplier()}>Ajouter</button><button type="button" className="secondary" onClick={() => setQuickSupplier(null)}>Annuler</button></span>}</label><label>Prix d’achat (FC) *<input required min="0" step="0.01" type="number" value={form.purchase_price} onChange={e => setForm({ ...form, purchase_price: e.target.value })}/></label><label>Prix de vente (FC) *<input required min="0" step="0.01" type="number" value={form.selling_price} onChange={e => setForm({ ...form, selling_price: e.target.value })}/></label>{!editing && <label>Stock initial<input min="0" type="number" value={form.initial_quantity} onChange={e => setForm({ ...form, initial_quantity: e.target.value })}/></label>}<label>Seuil d’alerte<input min="0" type="number" value={form.low_stock_threshold} onChange={e => setForm({ ...form, low_stock_threshold: e.target.value })}/></label></div>{error && <p className="form-error">{error}</p>}<div className="dialog-actions"><button type="button" className="secondary" onClick={() => setShowForm(false)}>Annuler</button><button className="primary" disabled={busy}>{busy ? 'Enregistrement…' : 'Enregistrer'}</button></div></form></div>}
     {movement && <div className="overlay"><form className="dialog narrow" onSubmit={submitMovement}><div className="dialog-head"><div><h2>{movement.kind === 'sale' ? 'Enregistrer une vente' : 'Ajouter au stock'}</h2><p>{movement.product.name} · disponible : {movement.product.quantity}</p></div><button type="button" className="close" onClick={() => setMovement(null)}>×</button></div><label>Quantité *<input required min="1" max={movement.kind === 'sale' ? movement.product.quantity : undefined} type="number" value={moveQty} onChange={e => setMoveQty(e.target.value)}/></label>{movement.kind === 'sale' && <p className="sale-summary">{saleQty} × {money(movement.product.selling_price)} = <b>{money(String(saleQty * Number(movement.product.selling_price)))}</b></p>}{error && <p className="form-error">{error}</p>}<div className="dialog-actions"><button type="button" className="secondary" onClick={() => setMovement(null)}>Annuler</button><button className="primary" disabled={busy}>{busy ? 'Traitement…' : 'Confirmer'}</button></div></form></div>}
+    {creatingShop && onCreateShop && <NewShopDialog onCreated={onCreateShop} onClose={() => setCreatingShop(false)} />}
   </main>
 }
 export default App

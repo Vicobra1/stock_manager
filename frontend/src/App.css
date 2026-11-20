@@ -64,3 +64,7 @@
 .plan-usage.near .plan-bar i{background:#eab64d}.plan-usage.near b{color:#ecc16e}.plan-usage.full .plan-bar i{background:#e0737a}.plan-usage.full b{color:#f0a5a9}
 .message.warning{border-color:#5c4a24;background:#2e2717;color:#ecc16e;gap:12px}
 @media(max-width:850px){.plan-card{display:none}}
+
+/* Créer une autre boutique (décision D6) */
+.new-shop{width:32px;height:32px;padding:0;display:grid;place-items:center;font-size:15px}.new-shop:hover{border-color:#9078e5;color:#d5caff}
+.new-shop-link{display:block;margin:0 auto 16px}

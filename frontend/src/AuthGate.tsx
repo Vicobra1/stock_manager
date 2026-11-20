@@ -27,6 +27,12 @@ export default function AuthGate() {
     setShop(data.shop)
   }
 
+  /** Boutique tout juste créée (décision D6) : elle rejoint la liste et s'ouvre aussitôt. */
+  async function openCreatedShop(created: ShopSummary) {
+    setShops(list => [...(list ?? []), created].sort((a, b) => a.name.localeCompare(b.name, 'fr')))
+    await chooseShop(created)
+  }
+
   /** Changer de boutique sans se déconnecter (sélecteur de l'en-tête) : l'application repart de zéro dans la nouvelle. */
   async function switchShop(target: ShopSummary) {
     try { await chooseShop(target) } catch (err) {
@@ -107,10 +113,12 @@ export default function AuthGate() {
     if (signingUp) return <Signup onSignedUp={token => void onLogin(token)} onBack={() => setSigningUp(false)} />
     return <Login notice={notice} onLogin={token => void onLogin(token)} onShowSignup={() => { setNotice(''); setSigningUp(true) }} />
   }
+  // Comme le backend : seule une personne déjà gérante d'au moins une boutique peut en créer une autre.
+  const onCreateShop = shops.some(s => s.role === 'manager') ? openCreatedShop : undefined
   if (shops.length === 0) return <NoRole user={user} onLogout={() => void logout()} />
-  if (!shop) return <ShopChooser user={user} shops={shops} notice={notice} onChoose={chooseShop} onLogout={() => void logout()} />
+  if (!shop) return <ShopChooser user={user} shops={shops} notice={notice} onChoose={chooseShop} onCreateShop={onCreateShop} onLogout={() => void logout()} />
   // L'application reçoit le rôle de la boutique en cours.
   // La clé fait repartir l'application de zéro à chaque changement de boutique (pages, données, formulaires).
   return <App key={shop.id} user={{ ...user, role: shop.role }} shop={shop} shops={shops}
-    onSwitchShop={s => void switchShop(s)} onLogout={() => void logout()} />
+    onSwitchShop={s => void switchShop(s)} onCreateShop={onCreateShop} onLogout={() => void logout()} />
 }
