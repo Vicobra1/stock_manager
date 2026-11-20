@@ -76,3 +76,13 @@
 .plan-details{display:flex;flex-direction:column;gap:11px;padding:2px 12px 13px;border-top:1px solid #2b2d36;padding-top:12px}
 .plan-upgrade{border-top:1px solid #2b2d36;padding-top:11px}.plan-upgrade .primary{width:100%;padding:8px 10px;font-size:12px}
 .plan-upgrade p{margin:9px 0 0;font-size:11.5px;line-height:1.5;color:#a1a2ad}
+
+/* Téléphone : bouton de déconnexion en icône, plan en badge dans l'en-tête */
+.logout-icon{display:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.plan-badge{display:none;align-items:center;gap:5px;height:24px;padding:0 8px;border-radius:20px;border:1px solid #3a3c46;background:#1c1d24;color:#b39bff;font-size:11px;font-weight:700;cursor:pointer}.plan-badge .plan-chevron{font-size:9px}.plan-badge[aria-expanded="true"] .plan-chevron{transform:rotate(180deg)}
+.topbar{position:relative}.plan-backdrop{position:fixed;inset:0;z-index:6}
+.plan-popover{position:absolute;top:58px;right:12px;width:min(260px,calc(100vw - 24px));background:#1c1d24;border:1px solid #383a45;border-radius:9px;box-shadow:0 12px 40px #0009;z-index:7}.plan-popover .plan-details{border-top:0}
+@media(max-width:850px){.plan-badge{display:inline-flex}}
+@media(max-width:600px){.logout{width:32px;height:32px;padding:0;display:grid;place-items:center}.logout-text{display:none}.logout-icon{display:block}}
+@media(max-width:600px){.topbar{padding:0 12px}.user-box{gap:5px;flex:1;justify-content:flex-end}.user-box>button,.user-box>.role-badge{flex-shrink:0}.shop-switcher{min-width:0;flex:0 1 auto}.shop-switcher select{width:100%}.plan-badge{padding:0 7px}}
+@media(max-width:600px){.user-box{gap:4px}.shop-switcher select{padding:0 18px 0 7px;background-position:right 4px center}.plan-badge .plan-chevron{display:none}.role-badge{padding-left:7px;padding-right:7px}}
