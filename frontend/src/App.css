@@ -86,3 +86,5 @@
 @media(max-width:600px){.logout{width:32px;height:32px;padding:0;display:grid;place-items:center}.logout-text{display:none}.logout-icon{display:block}}
 @media(max-width:600px){.topbar{padding:0 12px}.user-box{gap:5px;flex:1;justify-content:flex-end}.user-box>button,.user-box>.role-badge{flex-shrink:0}.shop-switcher{min-width:0;flex:0 1 auto}.shop-switcher select{width:100%}.plan-badge{padding:0 7px}}
 @media(max-width:600px){.user-box{gap:4px}.shop-switcher select{padding:0 18px 0 7px;background-position:right 4px center}.plan-badge .plan-chevron{display:none}.role-badge{padding-left:7px;padding-right:7px}}
+/* Tablette : en-tête sur une seule ligne */
+@media(max-width:850px){.crumb,.logout{white-space:nowrap}.user-name,.user-box .avatar{display:none}.shop-switcher select,.shop-name{max-width:160px}}
