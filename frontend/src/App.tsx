@@ -4,7 +4,7 @@ import Dashboard from './Dashboard'
 import Movements from './Movements'
 import NewShopDialog from './NewShopDialog'
 import Suppliers from './Suppliers'
-import { isQuotaError, PLAN_LABELS, ROLE_LABELS, request, type ShopInfo, type ShopSummary, type User } from './api'
+import { isQuotaError, PLAN_LABELS, PRO_LIMITS, ROLE_LABELS, request, type ShopInfo, type ShopSummary, type User } from './api'
 
 type Supplier = { id: number; name: string }
 type Product = { id: number; name: string; reference: string; supplier: number; supplier_name: string; purchase_price: string; selling_price: string; quantity: number; low_stock_threshold: number; is_low_stock: boolean; is_active: boolean }
@@ -38,6 +38,8 @@ function App({ user, shop, shops, onSwitchShop, onCreateShop, onLogout }: {
   const [info, setInfo] = useState<ShopInfo | null>(null)
   const [quota, setQuota] = useState('')
   const [creatingShop, setCreatingShop] = useState(false)
+  const [planOpen, setPlanOpen] = useState(false)
+  const [showPro, setShowPro] = useState(false)
 
   async function refresh() {
     try {
@@ -106,6 +108,9 @@ function App({ user, shop, shops, onSwitchShop, onCreateShop, onLogout }: {
   const productsLeft = info ? info.limits.products - info.usage.products : null
   const nearLimit = info !== null && productsLeft !== null && info.usage.products >= info.limits.products * 0.9
   const usageClass = (used: number, limit: number) => used >= limit ? 'full' : used >= limit * 0.9 ? 'near' : ''
+  // Pastille sur le menu replié : la limite la plus proche d'être atteinte (rouge si atteinte, orange si proche).
+  const usageStates = info ? [usageClass(info.usage.products, info.limits.products), usageClass(info.usage.members, info.limits.members)] : []
+  const planAlert = usageStates.includes('full') ? 'full' : usageStates.includes('near') ? 'near' : ''
 
   // Ajout rapide d'un fournisseur depuis le formulaire produit (décision F-2) : créé puis sélectionné aussitôt.
   async function addQuickSupplier() {
@@ -120,7 +125,11 @@ function App({ user, shop, shops, onSwitchShop, onCreateShop, onLogout }: {
   }
 
   return <main className="app-shell">
-    <aside className="sidebar"><div className="brand"><span className="brand-mark">S</span><span>Stock<span className="brand-light">Boutique</span></span></div><p className="nav-label">GESTION</p>{visiblePages.map(key => <button key={key} className={`nav-item ${current === key ? 'active' : ''}`} onClick={() => setPage(key)}><span>{PAGES[key].icon}</span> {PAGES[key].label}</button>)}{info && <div className="plan-card"><p className="plan-name">Plan {PLAN_LABELS[info.plan]}</p>{([['products', 'Produits actifs'], ['members', 'Membres']] as const).map(([key, label]) => <div key={key} className={`plan-usage ${usageClass(info.usage[key], info.limits[key])}`}><div><span>{label}</span><b>{info.usage[key]} / {info.limits[key]}</b></div><span className="plan-bar"><i style={{ width: `${Math.min(100, info.usage[key] / info.limits[key] * 100)}%` }}/></span></div>)}</div>}<div className="side-note"><span className="status-dot"/> API Django</div></aside>
+    <aside className="sidebar"><div className="brand"><span className="brand-mark">S</span><span>Stock<span className="brand-light">Boutique</span></span></div><p className="nav-label">GESTION</p>{visiblePages.map(key => <button key={key} className={`nav-item ${current === key ? 'active' : ''}`} onClick={() => setPage(key)}><span>{PAGES[key].icon}</span> {PAGES[key].label}</button>)}{info && <div className={`plan-card ${planOpen ? 'open' : ''}`}><button className="plan-toggle" aria-expanded={planOpen} onClick={() => { setPlanOpen(!planOpen); setShowPro(false) }}><span>Plan {PLAN_LABELS[info.plan]}</span>{planAlert && <i className={`plan-alert ${planAlert}`} title="Limite proche ou atteinte"/>}<span className="plan-chevron">▾</span></button>
+          {planOpen && <div className="plan-details">{([['products', 'Produits actifs'], ['members', 'Membres']] as const).map(([key, label]) => <div key={key} className={`plan-usage ${usageClass(info.usage[key], info.limits[key])}`}><div><span>{label}</span><b>{info.usage[key]} / {info.limits[key]}</b></div><span className="plan-bar"><i style={{ width: `${Math.min(100, info.usage[key] / info.limits[key] * 100)}%` }}/></span></div>)}
+            {info.plan === 'free' && isManager && <div className="plan-upgrade"><button className="primary" onClick={() => setShowPro(!showPro)}>Passer au plan Pro</button>
+              {showPro && <p>Le plan Pro offre {PRO_LIMITS.products.toLocaleString('fr-FR')} produits actifs et {PRO_LIMITS.members} membres. Contactez l’administrateur pour passer au Pro.</p>}</div>}
+          </div>}</div>}<div className="side-note"><span className="status-dot"/> API Django</div></aside>
     <section className="main-area"><header className="topbar"><span className="crumb">Gestion <span>/</span> {PAGES[current].label}</span><div className="user-box">{shops.length > 1
           ? <label className="shop-switcher" title="Changer de boutique"><span className="visually-hidden">Boutique</span><select value={shop.id} onChange={e => { const next = shops.find(s => s.id === Number(e.target.value)); if (next) onSwitchShop(next) }}>{shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
           : <span className="shop-name" title="Boutique en cours">{shop.name}</span>}{onCreateShop && <button className="secondary new-shop" title="Créer une autre boutique" aria-label="Créer une autre boutique" onClick={() => setCreatingShop(true)}>＋</button>}{user.role && <span className={`role-badge ${user.role}`}>{ROLE_LABELS[user.role]}</span>}<span className="user-name">{displayName}</span><span className="avatar">{displayName.charAt(0).toUpperCase()}</span><button className="secondary logout" onClick={onLogout}>Se déconnecter</button></div></header>
