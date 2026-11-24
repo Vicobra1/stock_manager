@@ -1,24 +1,55 @@
 const API = '/api'
-const TOKEN_KEY = 'stock-boutique-token'
+// Décision F-1 (option N3) : le jeton « compte » est partagé entre les onglets (localStorage, on reste connecté) ;
+// le jeton de boutique est propre à chaque onglet (sessionStorage) : deux onglets peuvent travailler dans deux
+// boutiques différentes sans que l'un fasse basculer l'autre.
+const ACCOUNT_TOKEN_KEY = 'stock-boutique-token'
+const SHOP_TOKEN_KEY = 'stock-boutique-shop-token'
+const SHOP_ID_KEY = 'stock-boutique-shop-id'
 
 export type Role = 'manager' | 'seller'
 export const ROLE_LABELS: Record<Role, string> = { manager: 'Gérant', seller: 'Vendeur' }
 export type User = { id: number; username: string; first_name: string; last_name: string; is_staff: boolean; role: Role | null }
+export type Plan = 'free' | 'pro'
+export const PLAN_LABELS: Record<Plan, string> = { free: 'Gratuit', pro: 'Pro' }
+/** Ce que donne le plan Pro, affiché pour inciter à passer au Pro : à garder en accord avec PLAN_LIMITS (backend/inventory/quotas.py). */
+export const PRO_LIMITS = { products: 1000, members: 50 }
+export type ShopSummary = { id: number; name: string; plan: Plan; role: Role }
+/** Plan de la boutique en cours, ses limites et ce qui est déjà utilisé (GET /api/shop/). */
+export type ShopInfo = ShopSummary & { plan_label: string; limits: { products: number; members: number }; usage: { products: number; members: number } }
 
-export function getToken() {
-  try { return localStorage.getItem(TOKEN_KEY) } catch { return null }
+// Copies en mémoire, pour que les appels fonctionnent même si le navigateur bloque le stockage.
+const memory: Record<string, string | null> = {}
+function read(storage: () => Storage, key: string) {
+  try { return storage().getItem(key) ?? memory[key] ?? null } catch { return memory[key] ?? null }
 }
-export function setToken(token: string) {
-  try { localStorage.setItem(TOKEN_KEY, token) } catch { /* stockage indisponible : la session durera jusqu'au rechargement */ }
-  memoryToken = token
+function write(storage: () => Storage, key: string, value: string | null) {
+  memory[key] = value
+  try { if (value === null) storage().removeItem(key); else storage().setItem(key, value) } catch { /* stockage indisponible */ }
 }
+const local = () => localStorage
+const session = () => sessionStorage
+
+/** Jeton « compte » (connexion), partagé entre les onglets. */
+export function getToken() { return read(local, ACCOUNT_TOKEN_KEY) }
+export function setToken(token: string) { write(local, ACCOUNT_TOKEN_KEY, token) }
+
+/** Jeton de la boutique choisie dans CET onglet. */
+export function getShopToken() { return read(session, SHOP_TOKEN_KEY) }
+export function getShopId() { const id = read(session, SHOP_ID_KEY); return id ? Number(id) : null }
+export function setShopSession(token: string, shopId: number) {
+  write(session, SHOP_TOKEN_KEY, token)
+  write(session, SHOP_ID_KEY, String(shopId))
+}
+export function clearShopSession() {
+  write(session, SHOP_TOKEN_KEY, null)
+  write(session, SHOP_ID_KEY, null)
+}
+
+/** Déconnexion : tout est effacé dans le navigateur (le serveur, lui, supprime tous les jetons). */
 export function clearToken() {
-  try { localStorage.removeItem(TOKEN_KEY) } catch { /* rien à effacer */ }
-  memoryToken = null
+  write(local, ACCOUNT_TOKEN_KEY, null)
+  clearShopSession()
 }
-
-// Copie en mémoire, pour que les appels fonctionnent même si le navigateur bloque localStorage.
-let memoryToken: string | null = null
 
 let onUnauthorized: (() => void) | null = null
 /** Enregistre ce qu'il faut faire quand l'API refuse le jeton (session expirée). */
@@ -28,8 +59,35 @@ let onForbidden: (() => void) | null = null
 /** Enregistre ce qu'il faut faire quand l'API refuse une action faute de droits (rôle retiré en cours de session). */
 export function setForbiddenHandler(handler: (() => void) | null) { onForbidden = handler }
 
+let onNotFound: (() => void) | null = null
+/** Enregistre ce qu'il faut faire après un « introuvable » : peut-être l'accès à la boutique a-t-il été retiré. */
+export function setNotFoundHandler(handler: (() => void) | null) { onNotFound = handler }
+
+let onShopRequired: (() => void) | null = null
+/** Enregistre ce qu'il faut faire quand l'API demande de choisir une boutique (jeton de boutique absent ou expiré). */
+export function setShopRequiredHandler(handler: (() => void) | null) { onShopRequired = handler }
+
+const CHOOSE_SHOP = "Choisissez d'abord une boutique."
+
+/** Erreur de l'API, avec le code et le contenu de la réponse (utile pour afficher les erreurs champ par champ). */
+export class ApiError extends Error {
+  status: number
+  data: unknown
+  constructor(message: string, status: number, data: unknown) {
+    super(message)
+    this.status = status
+    this.data = data
+  }
+}
+
+/** Refus dû à une limite du plan (403 avec le code « quota_exceeded ») : son message vient du serveur. */
+export function isQuotaError(e: unknown): e is ApiError {
+  return e instanceof ApiError && (e.data as { code?: string } | null)?.code === 'quota_exceeded'
+}
+
 export async function request(path: string, init?: RequestInit) {
-  const token = getToken() ?? memoryToken
+  // Le jeton de boutique s'il y en a un (API métier) ; sinon le jeton « compte » (choix de la boutique).
+  const token = getShopToken() ?? getToken()
   const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Token ${token}` } : {}), ...init?.headers }
   const response = await fetch(`${API}${path}`, { ...init, headers })
   const data = await response.json().catch(() => ({}))
@@ -38,8 +96,12 @@ export async function request(path: string, init?: RequestInit) {
     onUnauthorized?.()
     throw new Error('Votre session a expiré. Veuillez vous reconnecter.')
   }
-  if (response.status === 403) onForbidden?.()
-  if (!response.ok) throw new Error(data.detail || Object.values(data).flat().join(' ') || 'Une erreur est survenue.')
+  if (response.status === 403 && data.detail === CHOOSE_SHOP) {
+    clearShopSession()
+    onShopRequired?.()
+  } else if (response.status === 403 && data.code !== 'quota_exceeded') onForbidden?.()
+  if (response.status === 404) onNotFound?.()
+  if (!response.ok) throw new ApiError(data.detail || Object.values(data).flat().join(' ') || 'Une erreur est survenue.', response.status, data)
   return data
 }
 

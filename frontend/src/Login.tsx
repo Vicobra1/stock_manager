@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react'
-import { request, setToken, type User } from './api'
+import { request } from './api'
 
-export default function Login({ notice, onLogin }: { notice: string; onLogin: (user: User) => void }) {
+/** Premier temps de la connexion : le compte. Le choix de la boutique se fait ensuite (AuthGate). */
+export default function Login({ notice, onLogin, onShowSignup }: { notice: string; onLogin: (accountToken: string) => void; onShowSignup: () => void }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -11,8 +12,7 @@ export default function Login({ notice, onLogin }: { notice: string; onLogin: (u
     e.preventDefault(); setBusy(true); setError('')
     try {
       const data = await request('/auth/login/', { method: 'POST', body: JSON.stringify({ username, password }) })
-      setToken(data.token)
-      onLogin(data.user)
+      onLogin(data.token)
     } catch (err) {
       // fetch lève un TypeError quand le serveur est injoignable.
       setError(err instanceof TypeError ? 'API indisponible. Vérifiez que Django est démarré.' : err instanceof Error ? err.message : 'Connexion impossible.')
@@ -30,6 +30,7 @@ export default function Login({ notice, onLogin }: { notice: string; onLogin: (u
       <label>Nom d’utilisateur<input required autoFocus autoComplete="username" value={username} onChange={e => setUsername(e.target.value)} /></label>
       <label>Mot de passe<input required type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} /></label>
       <button className="primary" disabled={busy}>{busy ? 'Connexion…' : 'Se connecter'}</button>
+      <p className="login-switch">Pas encore de compte ? <button type="button" className="link-button" onClick={onShowSignup}>Créer votre boutique</button></p>
     </form>
   </main>
 }

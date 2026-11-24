@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import os
+from datetime import timedelta
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -82,6 +83,9 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        # Base de test sur fichier : la base en mémoire partagée verrouille des tables entières entre threads,
+        # ce qui rend impossibles les tests de concurrence (saas_acceptance/test_concurrency.py).
+        'TEST': {'NAME': BASE_DIR / 'test_db.sqlite3'},
     }
 }
 
@@ -133,12 +137,17 @@ MAILERS = {
 }
 
 CORS_ALLOWED_ORIGINS = ['http://localhost:5173']
+# Durée de vie fixe des jetons (compte et boutique), comptée depuis leur création (décision D2).
+TOKEN_LIFETIME = timedelta(hours=12)
+
 REST_FRAMEWORK = {
     # Toute l'API exige l'en-tête « Authorization: Token <clé> », sauf /api/auth/login/.
-    'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.TokenAuthentication'],
+    # Jeton « compte » ou jeton de boutique, tous deux refusés une fois expirés.
+    'DEFAULT_AUTHENTICATION_CLASSES': ['inventory.authentication.ExpiringTokenAuthentication'],
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
     # Nombre maximal de tentatives de connexion par adresse IP.
-    'DEFAULT_THROTTLE_RATES': {'login': '5/min'},
+    # Inscription (décision D6) : 5 par heure et par adresse IP.
+    'DEFAULT_THROTTLE_RATES': {'login': '5/min', 'signup': '5/hour'},
     # Aucun serveur intermédiaire de confiance : l'adresse est celle de la connexion (REMOTE_ADDR),
     # jamais l'en-tête X-Forwarded-For, que le client peut falsifier. À passer à 1 derrière un proxy.
     'NUM_PROXIES': 0,

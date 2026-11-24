@@ -11,14 +11,14 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.response import Response
-from rest_framework.views import APIView
-from .models import Product, Supplier, StockMovement
-from .roles import ROLE_MANAGER, IsManager, IsManagerOrSeller, get_role
+from .models import Membership, Product, Supplier, StockMovement
+from .quotas import PLAN_LABELS, ensure_product_slot, limits, lock_shop
+from .roles import ROLE_MANAGER, IsManager, IsManagerOrSeller, get_membership, get_role
+from .scoping import ShopScopedAPIView, ShopScopedViewSet
 from .serializers import ProductSerializer, SupplierSerializer, StockMovementSerializer
 
 
-class SupplierViewSet(viewsets.ModelViewSet):
-    queryset = Supplier.objects.all()
+class SupplierViewSet(ShopScopedViewSet, viewsets.ModelViewSet):
     serializer_class = SupplierSerializer
     search_fields = ["name", "phone", "email"]
     ordering_fields = ["name", "created_at"]
@@ -27,8 +27,19 @@ class SupplierViewSet(viewsets.ModelViewSet):
         # Lecture : gérant et vendeur. Création, modification, suppression : gérant seulement.
         return [(IsManagerOrSeller if self.action in ("list", "retrieve") else IsManager)()]
 
+    def get_base_queryset(self):
+        return Supplier.objects.all()
 
-class ProductViewSet(viewsets.ModelViewSet):
+    def destroy(self, request, *args, **kwargs):
+        # On ne supprime pas un fournisseur dont la boutique possède des produits (décision F-2) : message clair (409)
+        # au lieu de l'erreur serveur que provoquait la protection de la base.
+        if self.get_object().products.exists():
+            return Response({"detail": "Ce fournisseur a des produits : il ne peut pas être supprimé."},
+                            status=status.HTTP_409_CONFLICT)
+        return super().destroy(request, *args, **kwargs)
+
+
+class ProductViewSet(ShopScopedViewSet, viewsets.ModelViewSet):
     serializer_class = ProductSerializer
     search_fields = ["name", "reference", "supplier__name"]
     ordering_fields = ["name", "quantity", "selling_price", "created_at"]
@@ -38,7 +49,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         allowed = ("list", "retrieve", "sale")
         return [(IsManagerOrSeller if self.action in allowed else IsManager)()]
 
-    def get_queryset(self):
+    def get_base_queryset(self):
         queryset = Product.objects.select_related("supplier")
         active = self.request.query_params.get("active")
         low_stock = self.request.query_params.get("low_stock")
@@ -57,10 +68,23 @@ class ProductViewSet(viewsets.ModelViewSet):
         except (TypeError, ValueError):
             raise ValidationError({"initial_quantity": "La quantité initiale doit être un entier positif ou nul."})
         with transaction.atomic():
-            product = serializer.save(quantity=quantity)
+            if serializer.validated_data.get("is_active", True):
+                # Quota (D5) : « ticket » de la boutique, puis comptage ; un refus (403, quota_exceeded) annule tout (rien n'est créé).
+                lock_shop(self.shop)
+                ensure_product_slot(self.shop)
+            product = serializer.save(quantity=quantity, shop=self.shop)
             if quantity:
                 StockMovement.objects.create(product=product, movement_type=StockMovement.MovementType.INITIAL,
                                              quantity=quantity, note="Stock initial")
+
+    def perform_update(self, serializer):
+        reactivating = serializer.validated_data.get("is_active") is True and not serializer.instance.is_active
+        with transaction.atomic():
+            if reactivating:
+                # Réactiver reprend une place : même contrôle que pour une création.
+                lock_shop(self.shop)
+                ensure_product_slot(self.shop)
+            serializer.save()
 
     def destroy(self, request, *args, **kwargs):
         product = self.get_object()
@@ -94,7 +118,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         catalogue_price = product.selling_price if movement_type == StockMovement.MovementType.SALE else None
         # Seul le gérant peut fixer un autre prix (remise…) ; un vendeur vend toujours au prix du catalogue,
         # sinon il pourrait déclarer un prix plus bas que celui encaissé.
-        unit_price = request.data.get("unit_price", catalogue_price) if get_role(request.user) == ROLE_MANAGER else catalogue_price
+        unit_price = request.data.get("unit_price", catalogue_price) if get_role(request) == ROLE_MANAGER else catalogue_price
         movement = StockMovement.objects.create(
             product=product, movement_type=movement_type, quantity=quantity,
             unit_price=unit_price,
@@ -111,7 +135,7 @@ class MovementPagination(LimitOffsetPagination):
     max_limit = 200
 
 
-class StockMovementViewSet(viewsets.ReadOnlyModelViewSet):
+class StockMovementViewSet(ShopScopedViewSet, viewsets.ReadOnlyModelViewSet):
     """Historique des mouvements, filtrable via les paramètres de l'URL :
 
     - product       : id du produit
@@ -124,8 +148,9 @@ class StockMovementViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = StockMovementSerializer
     pagination_class = MovementPagination
     permission_classes = [IsManagerOrSeller]
+    shop_field = "product__shop"  # un mouvement appartient à la boutique de son produit (option M1)
 
-    def get_queryset(self):
+    def get_base_queryset(self):
         params = self.request.query_params
         queryset = StockMovement.objects.select_related("product", "product__supplier")
 
@@ -179,7 +204,7 @@ def _sales_amounts():
     return revenue, profit
 
 
-class DashboardView(APIView):
+class DashboardView(ShopScopedAPIView):
     """Indicateurs du tableau de bord (un seul appel pour tout l'écran). Réservé au gérant : il expose bénéfices et valeur du stock."""
     permission_classes = [IsManager]
 
@@ -189,14 +214,14 @@ class DashboardView(APIView):
         week_start = today - timedelta(days=6)
         revenue, profit = _sales_amounts()
 
-        active = Product.objects.filter(is_active=True)
+        active = self.scope(Product.objects.filter(is_active=True))
         stock = active.aggregate(
             cost=Sum(F("quantity") * F("purchase_price"), output_field=DecimalField(max_digits=18, decimal_places=2)),
             retail=Sum(F("quantity") * F("selling_price"), output_field=DecimalField(max_digits=18, decimal_places=2)),
         )
         low_stock = active.filter(quantity__lte=F("low_stock_threshold")).select_related("supplier").order_by("quantity", "name")
 
-        sales = StockMovement.objects.filter(movement_type=StockMovement.MovementType.SALE)
+        sales = self.scope(StockMovement.objects.filter(movement_type=StockMovement.MovementType.SALE), "product__shop")
         today_totals = sales.filter(created_at__date=today).aggregate(
             revenue=Sum(revenue), profit=Sum(profit), units=Sum("quantity"))
 
@@ -215,7 +240,7 @@ class DashboardView(APIView):
                         .annotate(units=Sum("quantity"), revenue=Sum(revenue))
                         .order_by("-units", "product__name")[:5])
 
-        recent = StockMovement.objects.select_related("product")[:6]
+        recent = self.scope(StockMovement.objects.select_related("product"), "product__shop")[:6]
         return Response({
             "products": {"active": active.count(), "low_stock": low_stock.count(),
                          "out_of_stock": active.filter(quantity=0).count()},
@@ -228,4 +253,24 @@ class DashboardView(APIView):
                               "reference": r["product__reference"], "units": r["units"], "revenue": r["revenue"]}
                              for r in top_products],
             "recent_movements": StockMovementSerializer(recent, many=True).data,
+        })
+
+
+class ShopInfoView(ShopScopedAPIView):
+    """GET -> la boutique en cours : plan, limites et utilisation (décision D6). Visible par tous ses membres,
+    pour qu'un vendeur comprenne aussi un refus dû à une limite. Le plan ne se change pas ici (facturation hors
+    périmètre)."""
+    permission_classes = [IsManagerOrSeller]
+
+    def get(self, request):
+        shop = self.shop
+        return Response({
+            "id": shop.id,
+            "name": shop.name,
+            "plan": shop.plan,
+            "plan_label": PLAN_LABELS[shop.plan],
+            "role": get_membership(request).role,
+            "limits": limits(shop),
+            "usage": {"products": self.scope(Product.objects.filter(is_active=True)).count(),
+                      "members": self.scope(Membership.objects.all()).count()},
         })

@@ -2,19 +2,25 @@ import { useEffect, useState, type FormEvent } from 'react'
 import './App.css'
 import Dashboard from './Dashboard'
 import Movements from './Movements'
-import { ROLE_LABELS, request, type User } from './api'
+import NewShopDialog from './NewShopDialog'
+import Suppliers from './Suppliers'
+import { isQuotaError, PLAN_LABELS, PRO_LIMITS, ROLE_LABELS, request, type ShopInfo, type ShopSummary, type User } from './api'
 
 type Supplier = { id: number; name: string }
 type Product = { id: number; name: string; reference: string; supplier: number; supplier_name: string; purchase_price: string; selling_price: string; quantity: number; low_stock_threshold: number; is_low_stock: boolean; is_active: boolean }
 
-type Page = 'dashboard' | 'products' | 'movements'
+type Page = 'dashboard' | 'products' | 'suppliers' | 'movements'
 const PAGES: Record<Page, { icon: string; label: string; title: string; subtitle: string }> = {
   dashboard: { icon: '◔', label: 'Tableau de bord', title: 'Tableau de bord', subtitle: 'Ventes, valeur du stock et alertes en un coup d’œil.' },
   products: { icon: '▦', label: 'Produits', title: 'Produits', subtitle: 'Gérez votre catalogue et suivez les quantités disponibles.' },
+  suppliers: { icon: '◫', label: 'Fournisseurs', title: 'Fournisseurs', subtitle: 'Les fournisseurs de la boutique et leurs coordonnées.' },
   movements: { icon: '⇅', label: 'Mouvements', title: 'Historique des mouvements', subtitle: 'Toutes les entrées et ventes, filtrables par type, produit, fournisseur et date.' },
 }
 
-function App({ user, onLogout }: { user: User; onLogout: () => void }) {
+function App({ user, shop, shops, onSwitchShop, onCreateShop, onLogout }: {
+  user: User; shop: ShopSummary; shops: ShopSummary[]; onSwitchShop: (shop: ShopSummary) => void
+  onCreateShop?: (shop: ShopSummary) => Promise<void>; onLogout: () => void
+}) {
   const [page, setPage] = useState<Page>('products')
   const [products, setProducts] = useState<Product[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -28,26 +34,39 @@ function App({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [form, setForm] = useState({ name: '', reference: '', supplier: '', purchase_price: '', selling_price: '', initial_quantity: '0', low_stock_threshold: '5' })
   const [movement, setMovement] = useState<{ product: Product; kind: 'sale' | 'entry' } | null>(null)
   const [moveQty, setMoveQty] = useState('1')
+  const [quickSupplier, setQuickSupplier] = useState<string | null>(null)
+  const [info, setInfo] = useState<ShopInfo | null>(null)
+  const [quota, setQuota] = useState('')
+  const [creatingShop, setCreatingShop] = useState(false)
+  const [planOpen, setPlanOpen] = useState(false)
+  const [showPro, setShowPro] = useState(false)
+  const [planPopover, setPlanPopover] = useState(false)
 
   async function refresh() {
     try {
       const [p, s] = await Promise.all([request(includeInactive ? '/products/' : '/products/?active=true'), request('/suppliers/')])
       setProducts(p.results ?? p); setSuppliers(s.results ?? s); setError('')
+      // Le plan et l'utilisation suivent chaque changement du catalogue (produits actifs).
+      request('/shop/').then(setInfo).catch(() => { /* l'affichage du plan est secondaire */ })
     } catch (e) { setError(e instanceof Error ? e.message : 'API indisponible. Vérifiez que Django est démarré.') }
   }
   useEffect(() => { void refresh() }, [includeInactive])
 
   function openNew() {
-    setEditing(null); setForm({ name: '', reference: '', supplier: '', purchase_price: '', selling_price: '', initial_quantity: '0', low_stock_threshold: '5' }); setShowForm(true)
+    setEditing(null); setQuickSupplier(null); setForm({ name: '', reference: '', supplier: '', purchase_price: '', selling_price: '', initial_quantity: '0', low_stock_threshold: '5' }); setShowForm(true)
   }
   function openEdit(p: Product) {
-    setEditing(p); setForm({ name: p.name, reference: p.reference, supplier: String(p.supplier), purchase_price: p.purchase_price, selling_price: p.selling_price, initial_quantity: '0', low_stock_threshold: String(p.low_stock_threshold) }); setShowForm(true)
+    setEditing(p); setQuickSupplier(null); setForm({ name: p.name, reference: p.reference, supplier: String(p.supplier), purchase_price: p.purchase_price, selling_price: p.selling_price, initial_quantity: '0', low_stock_threshold: String(p.low_stock_threshold) }); setShowForm(true)
   }
   async function saveProduct(e: FormEvent) {
     e.preventDefault(); setBusy(true); setError('')
     const body = { ...form, supplier: Number(form.supplier), purchase_price: Number(form.purchase_price), selling_price: Number(form.selling_price), low_stock_threshold: Number(form.low_stock_threshold), ...(editing ? {} : { initial_quantity: Number(form.initial_quantity) }) }
     try { await request(`/products/${editing ? `${editing.id}/` : ''}`, { method: editing ? 'PATCH' : 'POST', body: JSON.stringify(body) }); setShowForm(false); setNotice(editing ? 'Produit modifié.' : 'Produit ajouté.'); await refresh() }
-    catch (e) { setError(e instanceof Error ? e.message : 'Enregistrement impossible.') } finally { setBusy(false) }
+    catch (e) {
+      // Limite du plan atteinte : le formulaire n'y peut rien, on le ferme et on explique dans le bandeau.
+      if (isQuotaError(e)) { setShowForm(false); setNotice(''); setQuota(e.message) }
+      else setError(e instanceof Error ? e.message : 'Enregistrement impossible.')
+    } finally { setBusy(false) }
   }
   async function submitMovement(e: FormEvent) {
     e.preventDefault(); if (!movement) return; setBusy(true)
@@ -72,7 +91,10 @@ function App({ user, onLogout }: { user: User; onLogout: () => void }) {
       await request(`/products/${p.id}/`, { method: 'PATCH', body: JSON.stringify({ is_active: true }) })
       setNotice(`${p.name} a été réactivé.`)
       await refresh()
-    } catch (e) { setError(e instanceof Error ? e.message : 'Réactivation impossible.') }
+    } catch (e) {
+      if (isQuotaError(e)) { setNotice(''); setQuota(e.message) }
+      else setError(e instanceof Error ? e.message : 'Réactivation impossible.')
+    }
   }
   const filtered = products.filter(p => `${p.name} ${p.reference} ${p.supplier_name}`.toLowerCase().includes(query.toLowerCase()))
   const lowCount = products.filter(p => p.is_low_stock).length
@@ -83,23 +105,57 @@ function App({ user, onLogout }: { user: User; onLogout: () => void }) {
   const visiblePages = (Object.keys(PAGES) as Page[]).filter(key => key !== 'dashboard' || isManager)
   const current: Page = visiblePages.includes(page) ? page : 'products'
   const saleQty = Number(moveQty) || 0
+  // Places restantes pour des produits actifs ; le bandeau prévient à partir de 90 % de la limite.
+  const productsLeft = info ? info.limits.products - info.usage.products : null
+  const nearLimit = info !== null && productsLeft !== null && info.usage.products >= info.limits.products * 0.9
+  const usageClass = (used: number, limit: number) => used >= limit ? 'full' : used >= limit * 0.9 ? 'near' : ''
+  // Pastille sur le menu replié : la limite la plus proche d'être atteinte (rouge si atteinte, orange si proche).
+  const usageStates = info ? [usageClass(info.usage.products, info.limits.products), usageClass(info.usage.members, info.limits.members)] : []
+  const planAlert = usageStates.includes('full') ? 'full' : usageStates.includes('near') ? 'near' : ''
 
+  // Ajout rapide d'un fournisseur depuis le formulaire produit (décision F-2) : créé puis sélectionné aussitôt.
+  async function addQuickSupplier() {
+    const name = (quickSupplier ?? '').trim()
+    if (!name) return
+    try {
+      const created: Supplier = await request('/suppliers/', { method: 'POST', body: JSON.stringify({ name }) })
+      setSuppliers(current => [...current, created].sort((a, b) => a.name.localeCompare(b.name, 'fr')))
+      setForm(current => ({ ...current, supplier: String(created.id) }))
+      setQuickSupplier(null); setError('')
+    } catch (e) { setError(e instanceof Error ? e.message : 'Ajout du fournisseur impossible.') }
+  }
+
+  // Détail du plan : le même dans le menu de gauche (ordinateur) et sous le badge de l'en-tête (téléphone).
+  const planDetails = info && <div className="plan-details">{([['products', 'Produits actifs'], ['members', 'Membres']] as const).map(([key, label]) => <div key={key} className={`plan-usage ${usageClass(info.usage[key], info.limits[key])}`}><div><span>{label}</span><b>{info.usage[key]} / {info.limits[key]}</b></div><span className="plan-bar"><i style={{ width: `${Math.min(100, info.usage[key] / info.limits[key] * 100)}%` }}/></span></div>)}
+            {info.plan === 'free' && isManager && <div className="plan-upgrade"><button className="primary" onClick={() => setShowPro(!showPro)}>Passer au plan Pro</button>
+              {showPro && <p>Le plan Pro offre {PRO_LIMITS.products.toLocaleString('fr-FR')} produits actifs et {PRO_LIMITS.members} membres. Contactez l’administrateur pour passer au Pro.</p>}</div>}
+  </div>
   return <main className="app-shell">
-    <aside className="sidebar"><div className="brand"><span className="brand-mark">S</span><span>Stock<span className="brand-light">Boutique</span></span></div><p className="nav-label">GESTION</p>{visiblePages.map(key => <button key={key} className={`nav-item ${current === key ? 'active' : ''}`} onClick={() => setPage(key)}><span>{PAGES[key].icon}</span> {PAGES[key].label}</button>)}<div className="side-note"><span className="status-dot"/> API Django</div></aside>
-    <section className="main-area"><header className="topbar"><span className="crumb">Gestion <span>/</span> {PAGES[current].label}</span><div className="user-box">{user.role && <span className={`role-badge ${user.role}`}>{ROLE_LABELS[user.role]}</span>}<span className="user-name">{displayName}</span><span className="avatar">{displayName.charAt(0).toUpperCase()}</span><button className="secondary logout" onClick={onLogout}>Se déconnecter</button></div></header>
+    <aside className="sidebar"><div className="brand"><span className="brand-mark">S</span><span>Stock<span className="brand-light">Boutique</span></span></div><p className="nav-label">GESTION</p>{visiblePages.map(key => <button key={key} className={`nav-item ${current === key ? 'active' : ''}`} onClick={() => setPage(key)}><span>{PAGES[key].icon}</span> {PAGES[key].label}</button>)}{info && <div className={`plan-card ${planOpen ? 'open' : ''}`}><button className="plan-toggle" aria-expanded={planOpen} onClick={() => { setPlanOpen(!planOpen); setShowPro(false) }}><span>Plan {PLAN_LABELS[info.plan]}</span>{planAlert && <i className={`plan-alert ${planAlert}`} title="Limite proche ou atteinte"/>}<span className="plan-chevron">▾</span></button>
+          {planOpen && planDetails}</div>}<div className="side-note"><span className="status-dot"/> API Django</div></aside>
+    <section className="main-area"><header className="topbar"><span className="crumb">Gestion <span>/</span> {PAGES[current].label}</span><div className="user-box">{shops.length > 1
+          ? <label className="shop-switcher" title="Changer de boutique"><span className="visually-hidden">Boutique</span><select value={shop.id} onChange={e => { const next = shops.find(s => s.id === Number(e.target.value)); if (next) onSwitchShop(next) }}>{shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+          : <span className="shop-name" title="Boutique en cours">{shop.name}</span>}{onCreateShop && <button className="secondary new-shop" title="Créer une autre boutique" aria-label="Créer une autre boutique" onClick={() => setCreatingShop(true)}>＋</button>}{user.role && <span className={`role-badge ${user.role}`}>{ROLE_LABELS[user.role]}</span>}{info && <button className="plan-badge" aria-expanded={planPopover} title="Plan et limites" onClick={() => { setPlanPopover(!planPopover); setShowPro(false) }}>{PLAN_LABELS[info.plan]}{planAlert && <i className={`plan-alert ${planAlert}`}/>}<span className="plan-chevron">▾</span></button>}<span className="user-name">{displayName}</span><span className="avatar">{displayName.charAt(0).toUpperCase()}</span><button className="secondary logout" title="Se déconnecter" aria-label="Se déconnecter" onClick={onLogout}><svg className="logout-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11"/></svg><span className="logout-text">Se déconnecter</span></button></div>
+        {planPopover && planDetails && <><div className="plan-backdrop" onClick={() => setPlanPopover(false)}/><div className="plan-popover">{planDetails}</div></>}</header>
       <div className="content"><div className="page-heading"><div><p className="eyebrow">INVENTAIRE</p><h1>{PAGES[current].title}</h1><p className="subtitle">{PAGES[current].subtitle}</p></div>{current === 'products' && isManager && <button className="primary" onClick={openNew}>＋ <span>Nouveau produit</span></button>}</div>
         {current === 'dashboard' && <Dashboard onShowMovements={() => setPage('movements')} />}
         {current === 'movements' && <Movements />}
+        {current === 'suppliers' && <Suppliers canEdit={isManager} onChanged={() => void refresh()} />}
         {current === 'products' && <>
         <div className="stats"><article className="stat-card"><span className="stat-icon purple">▦</span><div><p>Produits actifs</p><strong>{products.length}</strong></div></article><article className="stat-card"><span className="stat-icon amber">↘</span><div><p>Stock faible</p><strong>{lowCount}</strong></div></article><article className="stat-card"><span className="stat-icon green">▤</span><div><p>Fournisseurs</p><strong>{suppliers.length}</strong></div></article></div>
+        {quota && <div className="message warning" role="alert">{quota}<button onClick={() => setQuota('')}>×</button></div>}
+        {!quota && isManager && nearLimit && info && <div className="message warning">{productsLeft! <= 0
+          ? `Limite atteinte : ${info.usage.products} / ${info.limits.products} produits actifs au plan ${PLAN_LABELS[info.plan]}. Désactivez un produit pour en ajouter un autre.`
+          : `Plus que ${productsLeft} place${productsLeft! > 1 ? 's' : ''} pour des produits actifs au plan ${PLAN_LABELS[info.plan]} (${info.usage.products} / ${info.limits.products}).`}</div>}
         {(error || notice) && <div className={`message ${error ? 'error' : ''}`}>{error || notice}<button onClick={() => { setError(''); setNotice('') }}>×</button></div>}
         <section className="panel"><div className="panel-head"><div><h2>Catalogue produits</h2><p>{filtered.length} produit{filtered.length !== 1 ? 's' : ''}</p>{isManager && <label className="inactive-filter"><input type="checkbox" checked={includeInactive} onChange={e => setIncludeInactive(e.target.checked)} /> Inclure les produits désactivés</label>}</div><label className="search"><span>⌕</span><input placeholder="Rechercher un produit…" value={query} onChange={e => setQuery(e.target.value)} /></label></div>
           <div className="table-wrap"><table><thead><tr><th>PRODUIT</th><th>FOURNISSEUR</th>{isManager && <th>PRIX D’ACHAT</th>}<th>PRIX DE VENTE</th><th>QUANTITÉ</th><th>ÉTAT</th><th></th></tr></thead><tbody>{filtered.map(p => <tr key={p.id}><td><div className="product-name">{p.name}</div><div className="ref">{p.reference}</div></td><td>{p.supplier_name}</td>{isManager && <td>{money(p.purchase_price)}</td>}<td className="price-sale">{money(p.selling_price)}</td><td><b>{p.quantity}</b><span className="unit"> unités</span></td><td><span className={`badge ${!p.is_active ? 'inactive' : p.is_low_stock ? 'warning' : 'success'}`}><i/> {!p.is_active ? 'Désactivé' : p.is_low_stock ? 'Stock faible' : 'En stock'}</span></td><td><div className="actions">{p.is_active && <button title="Enregistrer une vente" onClick={() => { setMovement({ product: p, kind: 'sale' }); setMoveQty('1') }}>−</button>}{isManager && <>{p.is_active ? <><button title="Ajouter du stock" onClick={() => { setMovement({ product: p, kind: 'entry' }); setMoveQty('1') }}>＋</button><button title="Modifier" onClick={() => openEdit(p)}>✎</button><button title="Désactiver le produit" aria-label={`Désactiver ${p.name}`} onClick={() => void deactivate(p)}>⏻</button></> : <button title="Réactiver le produit" aria-label={`Réactiver ${p.name}`} onClick={() => void reactivate(p)}>↻</button>}<button title="Supprimer" onClick={() => void remove(p)}>×</button></>}</div></td></tr>)}{!filtered.length && <tr><td colSpan={isManager ? 7 : 6} className="empty">{error ? 'Connexion à l’API en attente…' : 'Aucun produit trouvé.'}</td></tr>}</tbody></table></div>
         </section></>}
       </div>
     </section>
-    {showForm && <div className="overlay"><form className="dialog" onSubmit={saveProduct}><div className="dialog-head"><div><h2>{editing ? 'Modifier le produit' : 'Nouveau produit'}</h2><p>Les champs marqués d’un astérisque sont obligatoires.</p></div><button type="button" className="close" onClick={() => setShowForm(false)}>×</button></div><div className="form-grid"><label>Nom *<input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}/></label><label>Référence *<input required value={form.reference} onChange={e => setForm({ ...form, reference: e.target.value })}/></label><label>Fournisseur *<select required value={form.supplier} onChange={e => setForm({ ...form, supplier: e.target.value })}><option value="">Choisir un fournisseur</option>{suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label>Prix d’achat (FC) *<input required min="0" step="0.01" type="number" value={form.purchase_price} onChange={e => setForm({ ...form, purchase_price: e.target.value })}/></label><label>Prix de vente (FC) *<input required min="0" step="0.01" type="number" value={form.selling_price} onChange={e => setForm({ ...form, selling_price: e.target.value })}/></label>{!editing && <label>Stock initial<input min="0" type="number" value={form.initial_quantity} onChange={e => setForm({ ...form, initial_quantity: e.target.value })}/></label>}<label>Seuil d’alerte<input min="0" type="number" value={form.low_stock_threshold} onChange={e => setForm({ ...form, low_stock_threshold: e.target.value })}/></label></div>{error && <p className="form-error">{error}</p>}<div className="dialog-actions"><button type="button" className="secondary" onClick={() => setShowForm(false)}>Annuler</button><button className="primary" disabled={busy}>{busy ? 'Enregistrement…' : 'Enregistrer'}</button></div></form></div>}
+    {showForm && <div className="overlay"><form className="dialog" onSubmit={saveProduct}><div className="dialog-head"><div><h2>{editing ? 'Modifier le produit' : 'Nouveau produit'}</h2><p>Les champs marqués d’un astérisque sont obligatoires.</p></div><button type="button" className="close" onClick={() => setShowForm(false)}>×</button></div><div className="form-grid"><label>Nom *<input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}/></label><label>Référence *<input required value={form.reference} onChange={e => setForm({ ...form, reference: e.target.value })}/></label><label>Fournisseur *<span className="supplier-pick"><select required value={form.supplier} onChange={e => setForm({ ...form, supplier: e.target.value })}><option value="">{suppliers.length ? 'Choisir un fournisseur' : 'Aucun fournisseur : ajoutez-en un'}</option>{suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select><button type="button" className="secondary" onClick={() => setQuickSupplier('')}>＋ Nouveau</button></span>{quickSupplier !== null && <span className="quick-supplier"><input autoFocus placeholder="Nom du nouveau fournisseur" value={quickSupplier} onChange={e => setQuickSupplier(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void addQuickSupplier() } }} /><button type="button" className="primary" onClick={() => void addQuickSupplier()}>Ajouter</button><button type="button" className="secondary" onClick={() => setQuickSupplier(null)}>Annuler</button></span>}</label><label>Prix d’achat (FC) *<input required min="0" step="0.01" type="number" value={form.purchase_price} onChange={e => setForm({ ...form, purchase_price: e.target.value })}/></label><label>Prix de vente (FC) *<input required min="0" step="0.01" type="number" value={form.selling_price} onChange={e => setForm({ ...form, selling_price: e.target.value })}/></label>{!editing && <label>Stock initial<input min="0" type="number" value={form.initial_quantity} onChange={e => setForm({ ...form, initial_quantity: e.target.value })}/></label>}<label>Seuil d’alerte<input min="0" type="number" value={form.low_stock_threshold} onChange={e => setForm({ ...form, low_stock_threshold: e.target.value })}/></label></div>{error && <p className="form-error">{error}</p>}<div className="dialog-actions"><button type="button" className="secondary" onClick={() => setShowForm(false)}>Annuler</button><button className="primary" disabled={busy}>{busy ? 'Enregistrement…' : 'Enregistrer'}</button></div></form></div>}
     {movement && <div className="overlay"><form className="dialog narrow" onSubmit={submitMovement}><div className="dialog-head"><div><h2>{movement.kind === 'sale' ? 'Enregistrer une vente' : 'Ajouter au stock'}</h2><p>{movement.product.name} · disponible : {movement.product.quantity}</p></div><button type="button" className="close" onClick={() => setMovement(null)}>×</button></div><label>Quantité *<input required min="1" max={movement.kind === 'sale' ? movement.product.quantity : undefined} type="number" value={moveQty} onChange={e => setMoveQty(e.target.value)}/></label>{movement.kind === 'sale' && <p className="sale-summary">{saleQty} × {money(movement.product.selling_price)} = <b>{money(String(saleQty * Number(movement.product.selling_price)))}</b></p>}{error && <p className="form-error">{error}</p>}<div className="dialog-actions"><button type="button" className="secondary" onClick={() => setMovement(null)}>Annuler</button><button className="primary" disabled={busy}>{busy ? 'Traitement…' : 'Confirmer'}</button></div></form></div>}
+    {creatingShop && onCreateShop && <NewShopDialog onCreated={onCreateShop} onClose={() => setCreatingShop(false)} />}
   </main>
 }
 export default App

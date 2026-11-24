@@ -29,3 +29,62 @@
 .sale-summary{margin:-4px 0 6px;color:#9798a3;font-size:12px}.sale-summary b{color:#ecebf1}
 @media(max-width:600px){.crumb{display:none}.topbar{justify-content:flex-end}}
 .no-role-user{color:#ecebf1;font-weight:600}.login-card .message{margin-bottom:18px}.no-role-logout{width:100%;height:40px}
+
+/* Choix de la boutique */
+.shop-list{list-style:none;margin:0 0 16px;padding:0;display:flex;flex-direction:column;gap:8px}
+.shop-choice{width:100%;display:grid;grid-template-columns:1fr auto;grid-template-areas:"name go" "meta go";gap:4px 12px;align-items:center;text-align:left;padding:12px 14px;border:1px solid #343640;border-radius:8px;background:#111217;color:#eceaf3;cursor:pointer}
+.shop-choice:hover:not(:disabled){border-color:#7964bd;background:#17161f}.shop-choice:disabled{opacity:.6;cursor:wait}
+.shop-choice-name{grid-area:name;font-weight:700;font-size:14px}.shop-choice-meta{grid-area:meta;display:flex;align-items:center;gap:8px;color:#9798a3;font-size:12px}.shop-choice-go{grid-area:go;color:#b39bff;font-weight:700}
+
+/* Boutique en cours dans l'en-tête */
+.shop-switcher select{height:32px;max-width:200px;padding:0 28px 0 10px;border:1px solid #3a3c46;border-radius:6px;background:#111217;color:#eceaf3;font:inherit;font-size:13px;font-weight:600;color-scheme:dark;cursor:pointer;text-overflow:ellipsis}
+.shop-switcher select:hover,.shop-switcher select:focus{border-color:#9078e5;outline:0}
+.shop-name{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#eceaf3;font-size:13px;font-weight:700}
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media(max-width:600px){.shop-switcher select,.shop-name{max-width:96px;font-size:12px}.user-box{gap:6px;min-width:0}.user-box .avatar{display:none}}
+
+/* Inscription */
+.login-card .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field-error{color:#ff9fa5;font-size:11px;font-weight:500}.field-hint{color:#7f808c;font-size:11px;font-weight:400}
+.login-switch{margin:16px 0 0;text-align:center;color:#9798a3;font-size:13px}
+.link-button{background:none;border:0;padding:0;color:#b39bff;font:inherit;font-weight:600;cursor:pointer}.link-button:hover{text-decoration:underline}
+@media(max-width:600px){.login-card .form-row{grid-template-columns:1fr;gap:0}}
+
+/* Fournisseurs */
+.panel-head:has(.panel-tools){flex-wrap:wrap;gap:12px}.panel-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto}
+.supplier-pick{display:flex;gap:6px}.supplier-pick select{flex:1;min-width:0}.supplier-pick .secondary{white-space:nowrap;padding:0 10px;height:38px}
+.quick-supplier{display:flex;gap:6px;margin-top:6px}.quick-supplier input{flex:1;min-width:0}.quick-supplier button{height:38px;padding:0 10px;white-space:nowrap}
+@media(max-width:600px){.panel-tools{width:100%}.panel-tools .search{flex:1}}
+
+/* Plan et limites de la boutique (F7) */
+.plan-card{margin-top:auto;background:#1c1d24;border:1px solid #2b2d36;border-radius:9px;overflow:hidden}.plan-card+.side-note{margin-top:14px}
+.plan-name{margin:0;font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#b39bff}
+.plan-usage>div{display:flex;justify-content:space-between;font-size:12px;color:#a1a2ad;margin-bottom:6px}.plan-usage b{color:#ecebf1;font-weight:600}
+.plan-bar{display:block;height:5px;border-radius:3px;background:#2b2d36;overflow:hidden}.plan-bar i{display:block;height:100%;background:#8b70e8;border-radius:3px}
+.plan-usage.near .plan-bar i{background:#eab64d}.plan-usage.near b{color:#ecc16e}.plan-usage.full .plan-bar i{background:#e0737a}.plan-usage.full b{color:#f0a5a9}
+.message.warning{border-color:#5c4a24;background:#2e2717;color:#ecc16e;gap:12px}
+@media(max-width:850px){.plan-card{display:none}}
+
+/* Créer une autre boutique (décision D6) */
+.new-shop{width:32px;height:32px;padding:0;display:grid;place-items:center;font-size:15px}.new-shop:hover{border-color:#9078e5;color:#d5caff}
+.new-shop-link{display:block;margin:0 auto 16px}
+
+/* Plan en menu dépliant */
+.plan-toggle{width:100%;display:flex;align-items:center;gap:8px;background:none;border:0;padding:11px 12px;color:#b39bff;font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;cursor:pointer;text-align:left}.plan-toggle:hover{background:#22232b}
+.plan-toggle>span:first-child{flex:1}.plan-chevron{color:#777985;transition:transform .15s}.plan-card.open .plan-chevron{transform:rotate(180deg)}
+.plan-alert{width:7px;height:7px;border-radius:50%;background:#eab64d}.plan-alert.full{background:#e0737a}
+.plan-details{display:flex;flex-direction:column;gap:11px;padding:2px 12px 13px;border-top:1px solid #2b2d36;padding-top:12px}
+.plan-upgrade{border-top:1px solid #2b2d36;padding-top:11px}.plan-upgrade .primary{width:100%;padding:8px 10px;font-size:12px}
+.plan-upgrade p{margin:9px 0 0;font-size:11.5px;line-height:1.5;color:#a1a2ad}
+
+/* Téléphone : bouton de déconnexion en icône, plan en badge dans l'en-tête */
+.logout-icon{display:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.plan-badge{display:none;align-items:center;gap:5px;height:24px;padding:0 8px;border-radius:20px;border:1px solid #3a3c46;background:#1c1d24;color:#b39bff;font-size:11px;font-weight:700;cursor:pointer}.plan-badge .plan-chevron{font-size:9px}.plan-badge[aria-expanded="true"] .plan-chevron{transform:rotate(180deg)}
+.topbar{position:relative}.plan-backdrop{position:fixed;inset:0;z-index:6}
+.plan-popover{position:absolute;top:58px;right:12px;width:min(260px,calc(100vw - 24px));background:#1c1d24;border:1px solid #383a45;border-radius:9px;box-shadow:0 12px 40px #0009;z-index:7}.plan-popover .plan-details{border-top:0}
+@media(max-width:850px){.plan-badge{display:inline-flex}}
+@media(max-width:600px){.logout{width:32px;height:32px;padding:0;display:grid;place-items:center}.logout-text{display:none}.logout-icon{display:block}}
+@media(max-width:600px){.topbar{padding:0 12px}.user-box{gap:5px;flex:1;justify-content:flex-end}.user-box>button,.user-box>.role-badge{flex-shrink:0}.shop-switcher{min-width:0;flex:0 1 auto}.shop-switcher select{width:100%}.plan-badge{padding:0 7px}}
+@media(max-width:600px){.user-box{gap:4px}.shop-switcher select{padding:0 18px 0 7px;background-position:right 4px center}.plan-badge .plan-chevron{display:none}.role-badge{padding-left:7px;padding-right:7px}}
+/* Tablette : en-tête sur une seule ligne */
+@media(max-width:850px){.crumb,.logout{white-space:nowrap}.user-name,.user-box .avatar{display:none}.shop-switcher select,.shop-name{max-width:160px}}
