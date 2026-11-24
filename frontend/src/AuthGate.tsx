@@ -91,7 +91,6 @@ export default function AuthGate() {
   }, [])
 
   async function onLogin(token: string) {
-    setScreen('login')  // si la personne se déconnecte plus tard, elle revient à l'écran de connexion
     clearShopSession()  // un ancien jeton de boutique de cet onglet ne doit pas être réutilisé
     setToken(token)
     setNotice('')
@@ -107,6 +106,7 @@ export default function AuthGate() {
     clearToken()
     setUser(null); setShops(null); setShop(null)
     setNotice('')
+    setScreen('login')  // après une déconnexion, toujours l'écran de connexion (même après un rechargement)
   }
 
   if (checking) return <main className="login-page"><p className="login-subtitle">Chargement…</p></main>
