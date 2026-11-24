@@ -46,6 +46,15 @@ export function clearShopSession() {
   write(session, SHOP_ID_KEY, null)
 }
 
+/** Écran affiché à un visiteur dans CET onglet (présentation, connexion, inscription) : retrouvé après un rechargement. */
+export type VisitorScreen = 'landing' | 'login' | 'signup'
+const SCREEN_KEY = 'stock-boutique-screen'
+export function getVisitorScreen(): VisitorScreen {
+  const value = read(session, SCREEN_KEY)
+  return value === 'login' || value === 'signup' ? value : 'landing'
+}
+export function setVisitorScreen(screen: VisitorScreen) { write(session, SCREEN_KEY, screen) }
+
 /** Déconnexion : tout est effacé dans le navigateur (le serveur, lui, supprime tous les jetons). */
 export function clearToken() {
   write(local, ACCOUNT_TOKEN_KEY, null)

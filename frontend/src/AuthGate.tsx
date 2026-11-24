@@ -6,7 +6,7 @@ import NoRole from './NoRole'
 import ShopChooser from './ShopChooser'
 import Signup from './Signup'
 import {
-  clearShopSession, clearToken, getShopId, getShopToken, getToken, request, setForbiddenHandler,
+  clearShopSession, clearToken, getShopId, getVisitorScreen, setVisitorScreen, type VisitorScreen, getShopToken, getToken, request, setForbiddenHandler,
   setNotFoundHandler, setShopRequiredHandler, setShopSession, setToken, setUnauthorizedHandler, type ShopSummary, type User,
 } from './api'
 
@@ -18,7 +18,9 @@ export default function AuthGate() {
   const [checking, setChecking] = useState(() => getToken() !== null)
   const [notice, setNotice] = useState('')
   // Visiteur non connecté : la page publique d'abord, puis la connexion ou l'inscription.
-  const [screen, setScreen] = useState<'landing' | 'login' | 'signup'>('landing')
+  // L'écran est mémorisé dans l'onglet : un rechargement sur la connexion ou l'inscription y reste.
+  const [screen, setScreenState] = useState<VisitorScreen>(getVisitorScreen)
+  function setScreen(next: VisitorScreen) { setVisitorScreen(next); setScreenState(next) }
   const started = useRef(false)
 
   async function chooseShop(target: ShopSummary) {
@@ -68,7 +70,7 @@ export default function AuthGate() {
   }
 
   useEffect(() => {
-    setUnauthorizedHandler(() => { setUser(null); setShop(null); setNotice('Votre session a expiré. Veuillez vous reconnecter.') })
+    setUnauthorizedHandler(() => { setUser(null); setShop(null); setScreen('login'); setNotice('Votre session a expiré. Veuillez vous reconnecter.') })
     // Jeton de boutique expiré ou absent : retour au choix de la boutique.
     setShopRequiredHandler(() => { setShop(null); setNotice('Choisissez à nouveau votre boutique.') })
     // Un refus « pas les droits » peut venir d'un rôle modifié entre-temps : on relit ses boutiques et ses rôles.
