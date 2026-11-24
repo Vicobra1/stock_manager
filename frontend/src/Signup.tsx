@@ -6,7 +6,7 @@ type Errors = Partial<Record<keyof Fields | 'detail', string>>
 const EMPTY: Fields = { username: '', first_name: '', last_name: '', password: '', confirm: '', shop_name: '' }
 
 /** Inscription avec création de boutique (décision D6). Après succès, la personne est connectée directement. */
-export default function Signup({ onSignedUp, onBack }: { onSignedUp: (accountToken: string) => void; onBack: () => void }) {
+export default function Signup({ onSignedUp, onBack, onHome }: { onSignedUp: (accountToken: string) => void; onBack: () => void; onHome: () => void }) {
   const [form, setForm] = useState<Fields>(EMPTY)
   const [errors, setErrors] = useState<Errors>({})
   const [busy, setBusy] = useState(false)
@@ -57,5 +57,6 @@ export default function Signup({ onSignedUp, onBack }: { onSignedUp: (accountTok
       <button className="primary" disabled={busy}>{busy ? 'Création…' : 'Créer ma boutique'}</button>
       <p className="login-switch">Déjà un compte ? <button type="button" className="link-button" onClick={onBack}>Se connecter</button></p>
     </form>
+    <button type="button" className="link-button back-home" onClick={onHome}>← Découvrir StockBoutique</button>
   </main>
 }

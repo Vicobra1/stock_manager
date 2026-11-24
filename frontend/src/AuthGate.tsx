@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import App from './App'
+import Landing from './Landing'
 import Login from './Login'
 import NoRole from './NoRole'
 import ShopChooser from './ShopChooser'
@@ -16,7 +17,8 @@ export default function AuthGate() {
   const [shop, setShop] = useState<ShopSummary | null>(null)
   const [checking, setChecking] = useState(() => getToken() !== null)
   const [notice, setNotice] = useState('')
-  const [signingUp, setSigningUp] = useState(false)
+  // Visiteur non connecté : la page publique d'abord, puis la connexion ou l'inscription.
+  const [screen, setScreen] = useState<'landing' | 'login' | 'signup'>('landing')
   const started = useRef(false)
 
   async function chooseShop(target: ShopSummary) {
@@ -89,7 +91,7 @@ export default function AuthGate() {
   }, [])
 
   async function onLogin(token: string) {
-    setSigningUp(false)
+    setScreen('login')  // si la personne se déconnecte plus tard, elle revient à l'écran de connexion
     clearShopSession()  // un ancien jeton de boutique de cet onglet ne doit pas être réutilisé
     setToken(token)
     setNotice('')
@@ -110,8 +112,11 @@ export default function AuthGate() {
   if (checking) return <main className="login-page"><p className="login-subtitle">Chargement…</p></main>
   if (!user || !shops) {
     // L'inscription connecte directement : elle reprend le même chemin que la connexion.
-    if (signingUp) return <Signup onSignedUp={token => void onLogin(token)} onBack={() => setSigningUp(false)} />
-    return <Login notice={notice} onLogin={token => void onLogin(token)} onShowSignup={() => { setNotice(''); setSigningUp(true) }} />
+    const home = () => { setNotice(''); setScreen('landing') }
+    // Un message (session expirée…) s'affiche sur l'écran de connexion, même depuis la page publique.
+    if (screen === 'landing' && !notice) return <Landing onLogin={() => setScreen('login')} onSignup={() => setScreen('signup')} />
+    if (screen === 'signup') return <Signup onSignedUp={token => void onLogin(token)} onBack={() => setScreen('login')} onHome={home} />
+    return <Login notice={notice} onLogin={token => void onLogin(token)} onShowSignup={() => { setNotice(''); setScreen('signup') }} onHome={home} />
   }
   // Comme le backend : seule une personne déjà gérante d'au moins une boutique peut en créer une autre.
   const onCreateShop = shops.some(s => s.role === 'manager') ? openCreatedShop : undefined

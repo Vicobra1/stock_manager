@@ -11,7 +11,8 @@ export const ROLE_LABELS: Record<Role, string> = { manager: 'Gérant', seller: '
 export type User = { id: number; username: string; first_name: string; last_name: string; is_staff: boolean; role: Role | null }
 export type Plan = 'free' | 'pro'
 export const PLAN_LABELS: Record<Plan, string> = { free: 'Gratuit', pro: 'Pro' }
-/** Ce que donne le plan Pro, affiché pour inciter à passer au Pro : à garder en accord avec PLAN_LIMITS (backend/inventory/quotas.py). */
+/** Limites des plans, affichées sur la page publique et dans l'offre Pro : à garder en accord avec PLAN_LIMITS (backend/inventory/quotas.py). */
+export const FREE_LIMITS = { products: 20, members: 2 }
 export const PRO_LIMITS = { products: 1000, members: 50 }
 export type ShopSummary = { id: number; name: string; plan: Plan; role: Role }
 /** Plan de la boutique en cours, ses limites et ce qui est déjà utilisé (GET /api/shop/). */
