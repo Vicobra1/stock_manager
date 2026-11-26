@@ -11,7 +11,8 @@ export const ROLE_LABELS: Record<Role, string> = { manager: 'Gérant', seller: '
 export type User = { id: number; username: string; first_name: string; last_name: string; is_staff: boolean; role: Role | null }
 export type Plan = 'free' | 'pro'
 export const PLAN_LABELS: Record<Plan, string> = { free: 'Gratuit', pro: 'Pro' }
-/** Ce que donne le plan Pro, affiché pour inciter à passer au Pro : à garder en accord avec PLAN_LIMITS (backend/inventory/quotas.py). */
+/** Limites des plans, affichées sur la page publique et dans l'offre Pro : à garder en accord avec PLAN_LIMITS (backend/inventory/quotas.py). */
+export const FREE_LIMITS = { products: 20, members: 2 }
 export const PRO_LIMITS = { products: 1000, members: 50 }
 export type ShopSummary = { id: number; name: string; plan: Plan; role: Role }
 /** Plan de la boutique en cours, ses limites et ce qui est déjà utilisé (GET /api/shop/). */
@@ -44,6 +45,15 @@ export function clearShopSession() {
   write(session, SHOP_TOKEN_KEY, null)
   write(session, SHOP_ID_KEY, null)
 }
+
+/** Écran affiché à un visiteur dans CET onglet (présentation, connexion, inscription) : retrouvé après un rechargement. */
+export type VisitorScreen = 'landing' | 'login' | 'signup'
+const SCREEN_KEY = 'stock-boutique-screen'
+export function getVisitorScreen(): VisitorScreen {
+  const value = read(session, SCREEN_KEY)
+  return value === 'login' || value === 'signup' ? value : 'landing'
+}
+export function setVisitorScreen(screen: VisitorScreen) { write(session, SCREEN_KEY, screen) }
 
 /** Déconnexion : tout est effacé dans le navigateur (le serveur, lui, supprime tous les jetons). */
 export function clearToken() {

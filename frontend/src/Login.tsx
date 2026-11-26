@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { request } from './api'
 
 /** Premier temps de la connexion : le compte. Le choix de la boutique se fait ensuite (AuthGate). */
-export default function Login({ notice, onLogin, onShowSignup }: { notice: string; onLogin: (accountToken: string) => void; onShowSignup: () => void }) {
+export default function Login({ notice, onLogin, onShowSignup, onHome }: { notice: string; onLogin: (accountToken: string) => void; onShowSignup: () => void; onHome: () => void }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -32,5 +32,6 @@ export default function Login({ notice, onLogin, onShowSignup }: { notice: strin
       <button className="primary" disabled={busy}>{busy ? 'Connexion…' : 'Se connecter'}</button>
       <p className="login-switch">Pas encore de compte ? <button type="button" className="link-button" onClick={onShowSignup}>Créer votre boutique</button></p>
     </form>
+    <button type="button" className="link-button back-home" onClick={onHome}>← Découvrir StockBoutique</button>
   </main>
 }

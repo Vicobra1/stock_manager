@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import App from './App'
+import Landing from './Landing'
 import Login from './Login'
 import NoRole from './NoRole'
 import ShopChooser from './ShopChooser'
 import Signup from './Signup'
 import {
-  clearShopSession, clearToken, getShopId, getShopToken, getToken, request, setForbiddenHandler,
+  clearShopSession, clearToken, getShopId, getVisitorScreen, setVisitorScreen, type VisitorScreen, getShopToken, getToken, request, setForbiddenHandler,
   setNotFoundHandler, setShopRequiredHandler, setShopSession, setToken, setUnauthorizedHandler, type ShopSummary, type User,
 } from './api'
 
@@ -16,7 +17,10 @@ export default function AuthGate() {
   const [shop, setShop] = useState<ShopSummary | null>(null)
   const [checking, setChecking] = useState(() => getToken() !== null)
   const [notice, setNotice] = useState('')
-  const [signingUp, setSigningUp] = useState(false)
+  // Visiteur non connecté : la page publique d'abord, puis la connexion ou l'inscription.
+  // L'écran est mémorisé dans l'onglet : un rechargement sur la connexion ou l'inscription y reste.
+  const [screen, setScreenState] = useState<VisitorScreen>(getVisitorScreen)
+  function setScreen(next: VisitorScreen) { setVisitorScreen(next); setScreenState(next) }
   const started = useRef(false)
 
   async function chooseShop(target: ShopSummary) {
@@ -66,7 +70,7 @@ export default function AuthGate() {
   }
 
   useEffect(() => {
-    setUnauthorizedHandler(() => { setUser(null); setShop(null); setNotice('Votre session a expiré. Veuillez vous reconnecter.') })
+    setUnauthorizedHandler(() => { setUser(null); setShop(null); setScreen('login'); setNotice('Votre session a expiré. Veuillez vous reconnecter.') })
     // Jeton de boutique expiré ou absent : retour au choix de la boutique.
     setShopRequiredHandler(() => { setShop(null); setNotice('Choisissez à nouveau votre boutique.') })
     // Un refus « pas les droits » peut venir d'un rôle modifié entre-temps : on relit ses boutiques et ses rôles.
@@ -89,7 +93,6 @@ export default function AuthGate() {
   }, [])
 
   async function onLogin(token: string) {
-    setSigningUp(false)
     clearShopSession()  // un ancien jeton de boutique de cet onglet ne doit pas être réutilisé
     setToken(token)
     setNotice('')
@@ -105,13 +108,17 @@ export default function AuthGate() {
     clearToken()
     setUser(null); setShops(null); setShop(null)
     setNotice('')
+    setScreen('login')  // après une déconnexion, toujours l'écran de connexion (même après un rechargement)
   }
 
   if (checking) return <main className="login-page"><p className="login-subtitle">Chargement…</p></main>
   if (!user || !shops) {
     // L'inscription connecte directement : elle reprend le même chemin que la connexion.
-    if (signingUp) return <Signup onSignedUp={token => void onLogin(token)} onBack={() => setSigningUp(false)} />
-    return <Login notice={notice} onLogin={token => void onLogin(token)} onShowSignup={() => { setNotice(''); setSigningUp(true) }} />
+    const home = () => { setNotice(''); setScreen('landing') }
+    // Un message (session expirée…) s'affiche sur l'écran de connexion, même depuis la page publique.
+    if (screen === 'landing' && !notice) return <Landing onLogin={() => setScreen('login')} onSignup={() => setScreen('signup')} />
+    if (screen === 'signup') return <Signup onSignedUp={token => void onLogin(token)} onBack={() => setScreen('login')} onHome={home} />
+    return <Login notice={notice} onLogin={token => void onLogin(token)} onShowSignup={() => { setNotice(''); setScreen('signup') }} onHome={home} />
   }
   // Comme le backend : seule une personne déjà gérante d'au moins une boutique peut en créer une autre.
   const onCreateShop = shops.some(s => s.role === 'manager') ? openCreatedShop : undefined
